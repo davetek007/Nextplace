@@ -350,6 +350,9 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             {
                 Property = new Models.Property(
                     data.Property.Id,
+                    data.Property.PropertyId,
+                    data.Property.NextplaceId,
+                    data.Property.ListingId,
                     data.Property.Longitude,
                     data.Property.Latitude,
                     data.Property.Market,
@@ -359,8 +362,19 @@ public class PredictionController(AppDbContext context, IConfiguration configura
                     data.Property.Address,
                     data.Property.ListingDate,
                     data.Property.ListingPrice,
+                    data.Property.NumberOfBeds,
+                    data.Property.NumberOfBaths,
+                    data.Property.SquareFeet,
+                    data.Property.LotSize,
+                    data.Property.YearBuilt,
+                    data.Property.PropertyType,
+                    data.Property.LastSaleDate,
+                    data.Property.HoaDues,
                     data.Property.SaleDate,
-                    data.Property.SalePrice)
+                    data.Property.SalePrice,
+                    data.Property.CreateDate,
+                    data.Property.LastUpdateDate,
+                    data.Property.Active)
             };
 
             propertyPredictions.Add(propertyPrediction);

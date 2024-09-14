@@ -26,7 +26,7 @@ public class PropertyController(AppDbContext context) : ControllerBase
             await context.SaveLogEntry("SearchProperties", "Started", "Information", executionInstanceId);
             await context.SaveLogEntry("SearchProperties", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
 
-            filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 200);
+            filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
 
             var query = context.Property
                 .Include(tg => tg.Predictions)
@@ -82,6 +82,9 @@ public class PropertyController(AppDbContext context) : ControllerBase
             }
             var tg = new Property(
                 property.Id,
+                property.PropertyId,
+                property.NextplaceId,
+                property.ListingId,
                 property.Longitude,
                 property.Latitude,
                 property.Market,
@@ -91,12 +94,24 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 property.Address,
                 property.ListingDate,
                 property.ListingPrice,
+                property.NumberOfBeds,
+                property.NumberOfBaths,
+                property.SquareFeet,
+                property.LotSize,
+                property.YearBuilt,
+                property.PropertyType,
+                property.LastSaleDate,
+                property.HoaDues,
                 property.SaleDate,
-                property.SalePrice)
+                property.SalePrice,
+                property.CreateDate,
+                property.LastUpdateDate,
+                property.Active)
             {
-                Predictions = []
+                Predictions = new List<PropertyPrediction>()
             };
-            
+
+
             if (property.Predictions != null)
             {
                 foreach (var prediction in property.Predictions.Where(p => p.Active))
@@ -137,11 +152,11 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 .Include(tg => tg.Predictions)
                 .ToListAsync();
 
-            var trendingCities = properties
+            var trendingCities = properties.Where(p => p.City != null)
                 .GroupBy(tg => new { tg.City })
                 .Select(g => new TrendingCity(
-                    g.Key.City,
-                    g.Sum(tg => tg.Predictions!.Count(p=>p.Active))
+                    g.Key.City!,
+                    g.Sum(tg => tg.Predictions!.Count(p => p.Active))
                 ))
                 .OrderByDescending(g => g.NumberOfPredictions)
                 .Take(resultCount)
@@ -223,8 +238,10 @@ public class PropertyController(AppDbContext context) : ControllerBase
         if (!string.IsNullOrWhiteSpace(filter.FilterString))
         {
             query = query.Where(tgp =>
-                tgp.City.Contains(filter.FilterString) || tgp.State.Contains(filter.FilterString) ||
-                tgp.ZipCode.Contains(filter.FilterString) || tgp.Address.Contains(filter.FilterString));
+                tgp.City != null && tgp.City.Contains(filter.FilterString) ||
+                tgp.State != null && tgp.State.Contains(filter.FilterString) ||
+                tgp.ZipCode != null && tgp.ZipCode.Contains(filter.FilterString) ||
+                tgp.Address != null && tgp.Address.Contains(filter.FilterString));
         }
 
         return query;
@@ -311,6 +328,9 @@ public class PropertyController(AppDbContext context) : ControllerBase
         {
             properties.Add(new Property(
                 data.Id,
+                data.PropertyId,
+                data.NextplaceId,
+                data.ListingId,
                 data.Longitude,
                 data.Latitude,
                 data.Market,
@@ -320,8 +340,20 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 data.Address,
                 data.ListingDate,
                 data.ListingPrice,
+                data.NumberOfBeds,
+                data.NumberOfBaths,
+                data.SquareFeet,
+                data.LotSize,
+                data.YearBuilt,
+                data.PropertyType,
+                data.LastSaleDate,
+                data.HoaDues,
                 data.SaleDate,
-                data.SalePrice));
+                data.SalePrice,
+                data.CreateDate,
+                data.LastUpdateDate,
+                data.Active));
+
         }
 
         return properties;

@@ -10,6 +10,15 @@ public sealed class Property : EntityTableData
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public new long Id { get; init; }
 
+    [MaxLength(450)]
+    public required string PropertyId { get; init; }
+
+    [MaxLength(450)]
+    public required string NextplaceId { get; init; }
+
+    [MaxLength(450)]
+    public required string ListingId { get; init; }
+
     public required double Longitude { get; init; }
 
     public required double Latitude { get; init; }
@@ -18,26 +27,47 @@ public sealed class Property : EntityTableData
     public required string Market { get; init; }
 
     [MaxLength(450)]
-    public required string City { get; init; }
+    public string? City { get; init; }
 
     [MaxLength(450)]
-    public required string State { get; init; }
+    public string? State { get; init; }
 
     [MaxLength(450)]
-    public required string ZipCode { get; init; }
+    public string? ZipCode { get; init; }
 
     [MaxLength(450)]
-    public required string Address { get; init; }
+    public string? Address { get; init; }
 
     public required DateTime ListingDate { get; init; }
 
     public required double ListingPrice { get; init; }
 
-    public required DateTime? SaleDate { get; init; }
+    public int? NumberOfBeds { get; init; }
 
-    public required double? SalePrice { get; init; }
+    public double? NumberOfBaths { get; init; }
+
+    public int? SquareFeet { get; init; }
+
+    public long? LotSize { get; init; }
+
+    public int? YearBuilt { get; init; }
+
+    [MaxLength(450)]
+    public required string PropertyType { get; init; }
+
+    public DateTime? LastSaleDate { get; init; }
+
+    public int? HoaDues { get; init; }
+
+    public DateTime? SaleDate { get; init; }
+
+    public double? SalePrice { get; init; }
+
+    public required DateTime CreateDate { get; init; }
 
     public required DateTime LastUpdateDate { get; init; }
+
+    public required bool Active { get; init; }
 
     // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<PropertyPrediction>? Predictions { get; init; }
