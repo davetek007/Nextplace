@@ -53,7 +53,7 @@ public sealed class Property : EntityTableData
     public int? YearBuilt { get; init; }
 
     [MaxLength(450)]
-    public required string PropertyType { get; init; }
+    public required string PropertyType { get; init; } = null!;
 
     public DateTime? LastSaleDate { get; init; }
 
@@ -63,11 +63,11 @@ public sealed class Property : EntityTableData
 
     public double? SalePrice { get; init; }
 
-    public required DateTime CreateDate { get; init; }
+    public DateTime? CreateDate { get; init; }
 
-    public required DateTime LastUpdateDate { get; init; }
+    public DateTime? LastUpdateDate { get; init; }
 
-    public required bool Active { get; init; }
+    public bool? Active { get; init; }
 
     // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<PropertyPrediction>? Predictions { get; init; }

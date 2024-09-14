@@ -7,6 +7,7 @@ using Swashbuckle.AspNetCore.Annotations;
 using PropertyPrediction = Nextplace.Api.Models.PropertyPrediction;
 using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
+using Microsoft.Graph.Models.ExternalConnectors;
 
 namespace Nextplace.Api.Controllers;
 
@@ -15,6 +16,64 @@ namespace Nextplace.Api.Controllers;
 [Route("Properties")]
 public class PropertyController(AppDbContext context) : ControllerBase
 {
+    [HttpGet("Sample", Name = "SampleProperties")]
+    [SwaggerOperation("Sample properties per market")]
+    public async Task<List<MarketSample>> Sample([FromQuery] int sampleSize)
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            await context.SaveLogEntry("SampleProperties", "Started", "Information", executionInstanceId);
+            await context.SaveLogEntry("SampleProperties", "SampleSize: " + sampleSize, "Information", executionInstanceId);
+
+            sampleSize = Math.Clamp(sampleSize, 1, 500);
+
+            var sqlQuery = $@"
+                with r as (
+	                select	id, market, longitude, latitude, listingPrice, listingDate, row_number() over (partition by market order by newid()) as row
+	                from	dbo.Property)
+                select	id, market, longitude, latitude, listingPrice, listingDate,'' AS propertyId,'' AS nextplaceId,'' AS listingId,'' AS city,'' AS state,'' AS zipCode,'' AS address,NULL AS numberOfBeds,NULL AS numberOfBaths,NULL AS squareFeet,NULL AS lotSize,NULL AS yearBuilt,'' AS propertyType,NULL AS lastSaleDate,NULL AS hoaDues,NULL AS saleDate,NULL AS salePrice,NULL AS createDate,NULL AS lastUpdateDate,NULL AS active
+                from	r
+                where	row <= {sampleSize};";
+
+            var query = context.Property.FromSqlRaw(sqlQuery);
+            var dict = new Dictionary<string, MarketSample>();
+
+            var results = await query.ToListAsync();
+
+            foreach (var result in results)
+            {
+                var daysOnMarket = (int)(DateTime.UtcNow - result.ListingDate).TotalDays;
+
+                var pi = new PropertyInfo(
+                    result.Id,
+                    result.Longitude,
+                    result.Latitude,
+                    daysOnMarket,
+                    result.ListingPrice);
+
+                var key = result.Market.ToLowerInvariant();
+                if (!dict.ContainsKey(key))
+                {
+                    dict.Add(key, new MarketSample (result.Market, []));
+                }
+
+                dict[key].Properties.Add(pi);
+            }
+            
+            Response.AppendCorsHeaders();
+            
+            await context.SaveLogEntry("SampleProperties", "Completed", "Information", executionInstanceId);
+            return dict.Values.ToList();
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("SampleProperties", ex, executionInstanceId);
+            return null!;
+        }
+    }
+
     [HttpGet("Search", Name = "SearchProperties")]
     [SwaggerOperation("Search for properties")]
     public async Task<List<Property>> Search([FromQuery] PropertyFilter filter)
@@ -49,7 +108,7 @@ public class PropertyController(AppDbContext context) : ControllerBase
 
             query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
 
-            var properties = await GetPropertiesWithPredictionStats(query);
+            var properties = await GetProperties(query);
 
             await context.SaveLogEntry("SearchProperties", "Completed", "Information", executionInstanceId);
             return properties;
@@ -104,9 +163,9 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 property.HoaDues,
                 property.SaleDate,
                 property.SalePrice,
-                property.CreateDate,
-                property.LastUpdateDate,
-                property.Active)
+                property.CreateDate!.Value,
+                property.LastUpdateDate!.Value,
+                property.Active!.Value)
             {
                 Predictions = new List<PropertyPrediction>()
             };
@@ -318,7 +377,7 @@ public class PropertyController(AppDbContext context) : ControllerBase
         };
     }
 
-    private static async Task<List<Property>> GetPropertiesWithPredictionStats(IQueryable<PropertyContext> query)
+    private static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query)
     {
         var properties = new List<Property>();
 
@@ -350,9 +409,9 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 data.HoaDues,
                 data.SaleDate,
                 data.SalePrice,
-                data.CreateDate,
-                data.LastUpdateDate,
-                data.Active));
+                data.CreateDate!.Value,
+                data.LastUpdateDate!.Value,
+                data.Active!.Value));
 
         }
 

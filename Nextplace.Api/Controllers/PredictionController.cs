@@ -285,8 +285,8 @@ public class PredictionController(AppDbContext context, IConfiguration configura
         if (!string.IsNullOrWhiteSpace(filter.FilterString))
         {
             query = query.Where(tgp =>
-                tgp.Property.City.Contains(filter.FilterString) || tgp.Property.State.Contains(filter.FilterString) ||
-                tgp.Property.ZipCode.Contains(filter.FilterString) || tgp.Property.Address.Contains(filter.FilterString));
+                tgp.Property.City!.Contains(filter.FilterString) || tgp.Property.State!.Contains(filter.FilterString) ||
+                tgp.Property.ZipCode!.Contains(filter.FilterString) || tgp.Property.Address!.Contains(filter.FilterString));
         }
 
         return query;
@@ -372,9 +372,9 @@ public class PredictionController(AppDbContext context, IConfiguration configura
                     data.Property.HoaDues,
                     data.Property.SaleDate,
                     data.Property.SalePrice,
-                    data.Property.CreateDate,
-                    data.Property.LastUpdateDate,
-                    data.Property.Active)
+                    data.Property.CreateDate!.Value,
+                    data.Property.LastUpdateDate!.Value,
+                    data.Property.Active!.Value)
             };
 
             propertyPredictions.Add(propertyPrediction);
