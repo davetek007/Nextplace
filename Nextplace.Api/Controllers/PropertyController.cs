@@ -8,6 +8,7 @@ using PropertyPrediction = Nextplace.Api.Models.PropertyPrediction;
 using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
 using Microsoft.Graph.Models.ExternalConnectors;
+using TrainingData = Nextplace.Api.Db.TrainingData;
 
 namespace Nextplace.Api.Controllers;
 
@@ -70,6 +71,43 @@ public class PropertyController(AppDbContext context) : ControllerBase
         catch (Exception ex)
         {
             await context.SaveLogEntry("SampleProperties", ex, executionInstanceId);
+            return null!;
+        }
+    }
+
+    [HttpGet("TrainingData", Name = "SearchTrainingData")]
+    [SwaggerOperation("Get property training data")]
+    public async Task<List<Models.TrainingData>> SearchTrainingData([FromQuery] TrainingDataFilter filter)
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            await context.SaveLogEntry("SearchTrainingData", "Started", "Information", executionInstanceId);
+            await context.SaveLogEntry("SearchTrainingData", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
+
+            filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
+
+            var query = context.TrainingData
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+            Response.Headers.Append("Nextplace-Search-Total-Count", totalCount.ToString());
+
+            Response.AppendCorsHeaders();
+
+            await context.SaveLogEntry("SearchTrainingData", $"{totalCount} training data found", "Information", executionInstanceId);
+
+            query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
+
+            var trainingData = await GetTrainingData(query);
+
+            await context.SaveLogEntry("SearchTrainingData", "Completed", "Information", executionInstanceId);
+            return trainingData;
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("SearchTrainingData", ex, executionInstanceId);
             return null!;
         }
     }
@@ -386,6 +424,47 @@ public class PropertyController(AppDbContext context) : ControllerBase
         foreach (var data in results)
         {
             properties.Add(new Property(
+                data.Id,
+                data.PropertyId,
+                data.NextplaceId,
+                data.ListingId,
+                data.Longitude,
+                data.Latitude,
+                data.Market,
+                data.City,
+                data.State,
+                data.ZipCode,
+                data.Address,
+                data.ListingDate,
+                data.ListingPrice,
+                data.NumberOfBeds,
+                data.NumberOfBaths,
+                data.SquareFeet,
+                data.LotSize,
+                data.YearBuilt,
+                data.PropertyType,
+                data.LastSaleDate,
+                data.HoaDues,
+                data.SaleDate,
+                data.SalePrice,
+                data.CreateDate!.Value,
+                data.LastUpdateDate!.Value,
+                data.Active!.Value));
+
+        }
+
+        return properties;
+    }
+
+    private static async Task<List<Models.TrainingData>> GetTrainingData(IQueryable<TrainingData> query)
+    {
+        var properties = new List<Models.TrainingData>();
+
+        var results = await query.ToListAsync();
+
+        foreach (var data in results)
+        {
+            properties.Add(new Models.TrainingData(
                 data.Id,
                 data.PropertyId,
                 data.NextplaceId,

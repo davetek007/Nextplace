@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<ApiLog> ApiLog => Set<ApiLog>();
 
+    public DbSet<TrainingData> TrainingData => Set<TrainingData>();
+
     public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
 
     public DbSet<Validator> Validator => Set<Validator>();
