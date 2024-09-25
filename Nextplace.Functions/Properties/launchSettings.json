@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Bettensor.Functions": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7198 --csharp --verbose",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "nativeDebugging": false
+    }
+  }
+}

@@ -25,15 +25,23 @@ create table dbo.TrainingData (
 	[salePrice] [float] NULL,
 	[createDate] [datetime2](7) NOT NULL,
 	[lastUpdateDate] [datetime2](7) NOT NULL,
-	[active] [bit] NOT NULL,)
+	[active] [bit] NOT NULL)
 go
+
+create table dbo.Market (
+	id int identity(1,1) primary key not null, 
+	name nvarchar(450) not null, 
+	externalId nvarchar(450) not null,
+	[createDate] [datetime2](7) NOT NULL,
+	[lastUpdateDate] [datetime2](7) NOT NULL,
+	[active] [bit] NOT NULL)
 
 
 create table dbo.Property (
 	id bigint identity (1,1) primary key not null,
-	[propertyId] [nvarchar](450) NOT NULL,
+	[propertyId] bigint NOT NULL,
 	[nextplaceId] [nvarchar](450) NOT NULL,
-	[listingId] [nvarchar](450) NOT NULL,
+	[listingId] bigint NOT NULL,
 	[longitude] [float] NOT NULL,
 	[latitude] [float] NOT NULL,
 	[market] [nvarchar](450) NOT NULL,
@@ -66,6 +74,15 @@ create table dbo.Miner (
 	createDate datetime2 not null,
 	lastUpdateDate datetime2 not null,
 	active bit not null)
+go
+
+create table dbo.FunctionLog (
+	id bigint identity (1,1) primary key not null,
+	functionName nvarchar(450) not null,	
+	logEntry nvarchar(max) not null,	
+	entryType nvarchar(450) not null,	
+	timeStamp datetime2(7) not null,
+	executionInstanceId nvarchar(450) not null)
 go
 	
 create table dbo.Validator (
@@ -111,4 +128,7 @@ create table dbo.ApiLog (
 go
 
 create nonclustered index ixnMinerHotKeyColdKey on dbo.Miner(hotKey, coldKey)
-go 
+go
+
+create nonclustered index ixnPropertyListingIdPropertyId on dbo.Property (listingId, propertyId)
+go
