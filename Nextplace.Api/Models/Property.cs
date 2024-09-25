@@ -4,9 +4,9 @@ namespace Nextplace.Api.Models;
 
 public class Property(
     long id,
-    string propertyId,
+    long propertyId,
     string nextplaceId,
-    string listingId,
+    long listingId,
     double longitude,
     double latitude,
     string market,
@@ -35,7 +35,7 @@ public class Property(
 
     [Required]
     [MaxLength(450)]
-    public string PropertyId { get; } = propertyId;
+    public long PropertyId { get; } = propertyId;
 
     [Required]
     [MaxLength(450)]
@@ -43,7 +43,7 @@ public class Property(
 
     [Required]
     [MaxLength(450)]
-    public string ListingId { get; } = listingId;
+    public long ListingId { get; } = listingId;
 
     [Required]
     public double Longitude { get; set; } = longitude;

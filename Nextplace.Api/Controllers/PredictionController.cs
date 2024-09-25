@@ -372,9 +372,9 @@ public class PredictionController(AppDbContext context, IConfiguration configura
                     data.Property.HoaDues,
                     data.Property.SaleDate,
                     data.Property.SalePrice,
-                    data.Property.CreateDate!.Value,
-                    data.Property.LastUpdateDate!.Value,
-                    data.Property.Active!.Value)
+                    data.Property.CreateDate,
+                    data.Property.LastUpdateDate,
+                    data.Property.Active)
             };
 
             propertyPredictions.Add(propertyPrediction);

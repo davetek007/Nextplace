@@ -7,8 +7,6 @@ using Swashbuckle.AspNetCore.Annotations;
 using PropertyPrediction = Nextplace.Api.Models.PropertyPrediction;
 using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
-using Microsoft.Graph.Models.ExternalConnectors;
-using TrainingData = Nextplace.Api.Db.TrainingData;
 
 namespace Nextplace.Api.Controllers;
 
@@ -34,7 +32,7 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 with r as (
 	                select	id, market, longitude, latitude, listingPrice, listingDate, row_number() over (partition by market order by newid()) as row
 	                from	dbo.Property)
-                select	id, market, longitude, latitude, listingPrice, listingDate,'' AS propertyId,'' AS nextplaceId,'' AS listingId,'' AS city,'' AS state,'' AS zipCode,'' AS address,NULL AS numberOfBeds,NULL AS numberOfBaths,NULL AS squareFeet,NULL AS lotSize,NULL AS yearBuilt,'' AS propertyType,NULL AS lastSaleDate,NULL AS hoaDues,NULL AS saleDate,NULL AS salePrice,NULL AS createDate,NULL AS lastUpdateDate,NULL AS active
+                select	id, market, longitude, latitude, listingPrice, listingDate, cast (0 as bigint) AS propertyId, '' AS nextplaceId, cast (0 as bigint) AS listingId,'' AS city,'' AS state,'' AS zipCode,'' AS address, NULL AS numberOfBeds, NULL AS numberOfBaths, NULL AS squareFeet, NULL AS lotSize, NULL AS yearBuilt,'' AS propertyType, NULL AS lastSaleDate, NULL AS hoaDues, NULL AS saleDate, NULL AS salePrice, getutcdate() AS createDate, getutcdate() AS lastUpdateDate, cast (1 as bit) AS active
                 from	r
                 where	row <= {sampleSize};";
 
@@ -75,42 +73,6 @@ public class PropertyController(AppDbContext context) : ControllerBase
         }
     }
 
-    [HttpGet("TrainingData", Name = "SearchTrainingData")]
-    [SwaggerOperation("Get property training data")]
-    public async Task<List<Models.TrainingData>> SearchTrainingData([FromQuery] TrainingDataFilter filter)
-    {
-        var executionInstanceId = Guid.NewGuid().ToString();
-
-        try
-        {
-            await context.SaveLogEntry("SearchTrainingData", "Started", "Information", executionInstanceId);
-            await context.SaveLogEntry("SearchTrainingData", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
-
-            filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
-
-            var query = context.TrainingData
-                .AsQueryable();
-
-            var totalCount = await query.CountAsync();
-            Response.Headers.Append("Nextplace-Search-Total-Count", totalCount.ToString());
-
-            Response.AppendCorsHeaders();
-
-            await context.SaveLogEntry("SearchTrainingData", $"{totalCount} training data found", "Information", executionInstanceId);
-
-            query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
-
-            var trainingData = await GetTrainingData(query);
-
-            await context.SaveLogEntry("SearchTrainingData", "Completed", "Information", executionInstanceId);
-            return trainingData;
-        }
-        catch (Exception ex)
-        {
-            await context.SaveLogEntry("SearchTrainingData", ex, executionInstanceId);
-            return null!;
-        }
-    }
 
     [HttpGet("Search", Name = "SearchProperties")]
     [SwaggerOperation("Search for properties")]
@@ -201,9 +163,9 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 property.HoaDues,
                 property.SaleDate,
                 property.SalePrice,
-                property.CreateDate!.Value,
-                property.LastUpdateDate!.Value,
-                property.Active!.Value)
+                property.CreateDate,
+                property.LastUpdateDate,
+                property.Active)
             {
                 Predictions = new List<PropertyPrediction>()
             };
@@ -447,50 +409,9 @@ public class PropertyController(AppDbContext context) : ControllerBase
                 data.HoaDues,
                 data.SaleDate,
                 data.SalePrice,
-                data.CreateDate!.Value,
-                data.LastUpdateDate!.Value,
-                data.Active!.Value));
-
-        }
-
-        return properties;
-    }
-
-    private static async Task<List<Models.TrainingData>> GetTrainingData(IQueryable<TrainingData> query)
-    {
-        var properties = new List<Models.TrainingData>();
-
-        var results = await query.ToListAsync();
-
-        foreach (var data in results)
-        {
-            properties.Add(new Models.TrainingData(
-                data.Id,
-                data.PropertyId,
-                data.NextplaceId,
-                data.ListingId,
-                data.Longitude,
-                data.Latitude,
-                data.Market,
-                data.City,
-                data.State,
-                data.ZipCode,
-                data.Address,
-                data.ListingDate,
-                data.ListingPrice,
-                data.NumberOfBeds,
-                data.NumberOfBaths,
-                data.SquareFeet,
-                data.LotSize,
-                data.YearBuilt,
-                data.PropertyType,
-                data.LastSaleDate,
-                data.HoaDues,
-                data.SaleDate,
-                data.SalePrice,
-                data.CreateDate!.Value,
-                data.LastUpdateDate!.Value,
-                data.Active!.Value));
+                data.CreateDate,
+                data.LastUpdateDate,
+                data.Active));
 
         }
 
