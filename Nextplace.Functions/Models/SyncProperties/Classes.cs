@@ -86,7 +86,7 @@ public class YearBuilt
 public class LotSize
 {
     [JsonProperty("amount")]
-    public int? Amount { get; set; }
+    public long? Amount { get; set; }
 }
 
 public class HoaDues
