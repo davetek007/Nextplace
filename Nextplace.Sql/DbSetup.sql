@@ -5,7 +5,7 @@ create table dbo.Market (
 	[createDate] [datetime2](7) NOT NULL,
 	[lastUpdateDate] [datetime2](7) NOT NULL,
 	[active] [bit] NOT NULL)
-
+go
 
 create table dbo.Property (
 	id bigint identity (1,1) primary key not null,
@@ -33,17 +33,27 @@ create table dbo.Property (
 	[salePrice] [float] NULL,
 	[createDate] [datetime2](7) NOT NULL,
 	[lastUpdateDate] [datetime2](7) NOT NULL,
-	[active] [bit] NOT NULL,)
+	[active] [bit] NOT NULL,
+	estimatesCollected bit not null)
 go
 
-create table dbo.Miner (
+create table dbo.PropertyEstimate (
 	id bigint identity (1,1) primary key not null, 
-	hotKey nvarchar(100) not null,
-	coldKey nvarchar(100) not null,
-	incentive float(53) not null,
+	propertyId bigint foreign key references dbo.Property (id) not null,
+	dateEstimated datetime2 not null,
+	estimate float(53) not null,
 	createDate datetime2 not null,
 	lastUpdateDate datetime2 not null,
 	active bit not null)
+go
+
+create table dbo.Market (
+	id int identity(1,1) primary key not null, 
+	name nvarchar(450) not null, 
+	externalId nvarchar(450) not null,
+	[createDate] [datetime2](7) NOT NULL,
+	[lastUpdateDate] [datetime2](7) NOT NULL,
+	[active] [bit] NOT NULL)
 go
 
 create table dbo.FunctionLog (
@@ -68,7 +78,6 @@ go
 
 create table dbo.PropertyPrediction (
 	id bigint identity (1,1) primary key not null,
-	propertyId bigint foreign key references dbo.Property (id) not null,
 	minerId bigint foreign key references dbo.Miner (id) not null, 
 	predictionDate datetime2 not null,
 	predictedSaleDate datetime2 not null,

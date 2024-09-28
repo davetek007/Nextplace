@@ -10,13 +10,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Market> Market => Set<Market>();
 
     public DbSet<Property> Property => Set<Property>();
-    
+
+    public DbSet<PropertyEstimate> PropertyEstimate => Set<PropertyEstimate>();
+
     public DbSet<Miner> Miner => Set<Miner>();
 
     public DbSet<Validator> Validator => Set<Validator>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<PropertyEstimate>().HasOne(tgp => tgp.Property).WithMany(m => m.Estimates)
+            .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
+
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             modelBuilder.Entity(entityType.ClrType)

@@ -160,7 +160,8 @@ public sealed class SyncProperties(ILoggerFactory loggerFactory, IConfiguration 
             HoaDues = hoaDues,
             CreateDate = DateTime.UtcNow,
             LastUpdateDate = DateTime.UtcNow,
-            Active = true
+            Active = true,
+            EstimatesCollected = false
         };
 
         context.Property.Add(property);

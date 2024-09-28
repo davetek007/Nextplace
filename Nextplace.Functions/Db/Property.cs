@@ -68,4 +68,9 @@ public sealed class Property : EntityTableData
     public required DateTime LastUpdateDate { get; set; }
 
     public required bool Active { get; init; }
+
+    public required bool EstimatesCollected { get; set; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<PropertyEstimate>? Estimates { get; init; }
 }
