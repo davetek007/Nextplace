@@ -2,13 +2,16 @@
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Reflection;
+using Microsoft.Graph.Models.ExternalConnectors;
+using Microsoft.Graph.Models.Security;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Nextplace.Api.Controllers;
 
 [Tags("Nextplace APIs")]
 [ApiController]
 [Route("Nextplace")]
-public class NextplaceController(AppDbContext context, IConfiguration config) : ControllerBase
+public class NextplaceController(AppDbContext context, IConfiguration config, IMemoryCache cache) : ControllerBase
 {
     [HttpGet("/Version", Name = "GetVersion")]
     [SwaggerOperation("Get product version")]
@@ -17,6 +20,12 @@ public class NextplaceController(AppDbContext context, IConfiguration config) : 
         var executionInstanceId = Guid.NewGuid().ToString();
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, config, "GetVersion", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetVersion", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("GetVersion", "Started", "Information", executionInstanceId);
 
             var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString();

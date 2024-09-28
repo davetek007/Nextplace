@@ -10,6 +10,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Market> Market => Set<Market>();
 
     public DbSet<Property> Property => Set<Property>();
+    
+    public DbSet<Miner> Miner => Set<Miner>();
+
+    public DbSet<Validator> Validator => Set<Validator>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

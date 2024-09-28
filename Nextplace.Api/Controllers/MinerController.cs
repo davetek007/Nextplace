@@ -3,13 +3,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
 using Miner = Nextplace.Api.Models.Miner;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Nextplace.Api.Controllers;
 
 [Tags("Miner APIs")]
 [ApiController]
 [Route("[controller]")]
-public class MinerController(AppDbContext context) : ControllerBase
+public class MinerController(AppDbContext context, IConfiguration configuration, IMemoryCache cache) : ControllerBase
 {
     [SwaggerOperation(
         "Get miner stats")]
@@ -20,6 +21,12 @@ public class MinerController(AppDbContext context) : ControllerBase
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, configuration, "GetMinerStats", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetMinerStats", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
             await context.SaveLogEntry("GetMinerStats", "Started", "Information", executionInstanceId);
 
             var stats = await context.MinerStats.Include(minerRanking => minerRanking.Miner).ToListAsync();

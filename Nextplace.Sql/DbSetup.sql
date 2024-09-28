@@ -1,33 +1,3 @@
-	
-create table dbo.TrainingData (
-	id bigint identity (1,1) primary key not null,
-	[propertyId] [nvarchar](450) NOT NULL,
-	[nextplaceId] [nvarchar](450) NOT NULL,
-	[listingId] [nvarchar](450) NULL,
-	[longitude] [float] NOT NULL,
-	[latitude] [float] NOT NULL,
-	[market] [nvarchar](450) NOT NULL,
-	[city] [nvarchar](450) NULL,
-	[state] [nvarchar](450) NULL,
-	[zipCode] [nvarchar](450) NULL,
-	[address] [nvarchar](450) NULL,
-	[listingDate] [datetime2](7) NULL,
-	[listingPrice] [float] NULL,
-	[numberOfBeds] [int] NULL,
-	[numberOfBaths] [float] NULL,
-	[squareFeet] [int] NULL,
-	[lotSize] bigint  NULL,
-	[yearBuilt] [int] NULL,
-	[propertyType] [nvarchar](450) NOT NULL,
-	[lastSaleDate] [datetime2](7) NULL,
-	[hoaDues] [int] NULL,
-	[saleDate] [datetime2](7) NULL,
-	[salePrice] [float] NULL,
-	[createDate] [datetime2](7) NOT NULL,
-	[lastUpdateDate] [datetime2](7) NOT NULL,
-	[active] [bit] NOT NULL)
-go
-
 create table dbo.Market (
 	id int identity(1,1) primary key not null, 
 	name nvarchar(450) not null, 
@@ -131,4 +101,7 @@ create nonclustered index ixnMinerHotKeyColdKey on dbo.Miner(hotKey, coldKey)
 go
 
 create nonclustered index ixnPropertyListingIdPropertyId on dbo.Property (listingId, propertyId)
+go
+
+create nonclustered index ixnPropertyNextplaceId on dbo.Property (nextplaceId) include (listingDate)
 go

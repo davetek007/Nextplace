@@ -2,13 +2,10 @@
 
 namespace Nextplace.Api.Models;
 
-public class PostPredictionRequest(double propertyLongitude, double propertyLatitude, string minerHotKey, string minerColdKey, DateTime predictionDate, float predictedSalePrice, DateTime predictedSaleDate)
+public class PostPredictionRequest(string nextplaceId, string minerHotKey, string minerColdKey, DateTime predictionDate, float predictedSalePrice, DateTime predictedSaleDate)
 {
     [Required]
-    public double PropertyLongitude { get; } = propertyLongitude;
-
-    [Required]
-    public double PropertyLatitude { get; } = propertyLatitude;
+    public string NextplaceId { get; } = nextplaceId;
 
     [Required]
     public string MinerHotKey { get; } = minerHotKey;

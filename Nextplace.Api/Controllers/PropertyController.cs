@@ -7,22 +7,29 @@ using Swashbuckle.AspNetCore.Annotations;
 using PropertyPrediction = Nextplace.Api.Models.PropertyPrediction;
 using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Nextplace.Api.Controllers;
 
 [Tags("Property APIs")]
 [ApiController]
 [Route("Properties")]
-public class PropertyController(AppDbContext context) : ControllerBase
+public class PropertyController(AppDbContext context, IConfiguration config, IMemoryCache cache) : ControllerBase
 {
     [HttpGet("Sample", Name = "SampleProperties")]
     [SwaggerOperation("Sample properties per market")]
-    public async Task<List<MarketSample>> Sample([FromQuery] int sampleSize)
+    public async Task<ActionResult<List<MarketSample>>> Sample([FromQuery] int sampleSize)
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, config, "SampleProperties", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("SampleProperties", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("SampleProperties", "Started", "Information", executionInstanceId);
             await context.SaveLogEntry("SampleProperties", "SampleSize: " + sampleSize, "Information", executionInstanceId);
 
@@ -64,24 +71,30 @@ public class PropertyController(AppDbContext context) : ControllerBase
             Response.AppendCorsHeaders();
             
             await context.SaveLogEntry("SampleProperties", "Completed", "Information", executionInstanceId);
-            return dict.Values.ToList();
+            return Ok(dict.Values.ToList());
         }
         catch (Exception ex)
         {
             await context.SaveLogEntry("SampleProperties", ex, executionInstanceId);
-            return null!;
+            return StatusCode(500);
         }
     }
 
 
     [HttpGet("Search", Name = "SearchProperties")]
     [SwaggerOperation("Search for properties")]
-    public async Task<List<Property>> Search([FromQuery] PropertyFilter filter)
+    public async Task<ActionResult<List<Property>>> Search([FromQuery] PropertyFilter filter)
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, config, "SearchProperties", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("SearchProperties", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("SearchProperties", "Started", "Information", executionInstanceId);
             await context.SaveLogEntry("SearchProperties", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
 
@@ -111,27 +124,33 @@ public class PropertyController(AppDbContext context) : ControllerBase
             var properties = await GetProperties(query);
 
             await context.SaveLogEntry("SearchProperties", "Completed", "Information", executionInstanceId);
-            return properties;
+            return Ok(properties);
         }
         catch (Exception ex)
         {
             await context.SaveLogEntry("SearchProperties", ex, executionInstanceId);
-            return null!;
+            return StatusCode(500);
         }
     }
 
-    [HttpGet("{propertyId}", Name = "GetProperty")]
+    [HttpGet("{nextplaceId}", Name = "GetProperty")]
     [SwaggerOperation("Get for property by ID")]
-    public async Task<IActionResult> Get([SwaggerParameter("Property ID", Required = true)][FromRoute] long propertyId)
+    public async Task<IActionResult> Get([SwaggerParameter("Nextplace ID", Required = true)][FromRoute] string nextplaceId)
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, config, "GetProperty", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetProperty", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("GetProperty", "Started", "Information", executionInstanceId);
             var property = await context.Property.Include(tg => tg.Predictions)!
-                .ThenInclude(propertyPrediction => propertyPrediction.Miner)
-                .FirstOrDefaultAsync(tg => tg.Id == propertyId);
+                .ThenInclude(propertyPrediction => propertyPrediction.Miner).OrderByDescending(p=>p.ListingDate)
+                .FirstOrDefaultAsync(tg => tg.NextplaceId == nextplaceId);
 
             if (property == null)
             {
@@ -197,12 +216,18 @@ public class PropertyController(AppDbContext context) : ControllerBase
 
     [HttpGet("Cities/Trending", Name = "GetTrendingCities")]
     [SwaggerOperation("Get trending cities")]
-    public async Task<List<TrendingCity>> GetTrendingCities()
+    public async Task<ActionResult<List<TrendingCity>>> GetTrendingCities()
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, config, "GetTrendingCities", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetTrendingCities", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("GetTrendingCities", "Started", "Information", executionInstanceId);
             const int resultCount = 200;
 
@@ -224,24 +249,29 @@ public class PropertyController(AppDbContext context) : ControllerBase
             Response.AppendCorsHeaders();
             
             await context.SaveLogEntry("GetTrendingCities", "Completed", "Information", executionInstanceId);
-            return trendingCities;
+            return Ok(trendingCities);
         }
         catch (Exception ex)
         {
             await context.SaveLogEntry("GetTrendingCities", ex, executionInstanceId);
-            return null!;
+            return StatusCode(500);
         }
     }
 
-
     [HttpGet("Markets/Trending", Name = "GetTrendingMarkets")]
     [SwaggerOperation("Get trending markets")]
-    public async Task<List<TrendingMarket>> GetTrendingMarkets()
+    public async Task<ActionResult<List<TrendingMarket>>> GetTrendingMarkets()
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, config, "GetTrendingMarkets", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetTrendingMarkets", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("GetTrendingMarkets", "Started", "Information", executionInstanceId);
             const int resultCount = 200;
 
@@ -263,12 +293,12 @@ public class PropertyController(AppDbContext context) : ControllerBase
             Response.AppendCorsHeaders();
 
             await context.SaveLogEntry("GetTrendingMarkets", "Completed", "Information", executionInstanceId);
-            return trendingMarkets;
+            return Ok(trendingMarkets);
         }
         catch (Exception ex)
         {
             await context.SaveLogEntry("GetTrendingMarkets", ex, executionInstanceId);
-            return null!;
+            return StatusCode(500);
         }
     }
 

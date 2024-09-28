@@ -1,4 +1,3 @@
-using System.Text;
 using Nextplace.Api.Db;
 using Nextplace.Api.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -7,22 +6,29 @@ using Newtonsoft.Json;
 using Swashbuckle.AspNetCore.Annotations;
 using Miner = Nextplace.Api.Db.Miner;
 using PropertyPrediction = Nextplace.Api.Db.PropertyPrediction;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Nextplace.Api.Controllers;
 
 [Tags("Prediction APIs")]
 [ApiController]
 [Route("Predictions")]
-public class PredictionController(AppDbContext context, IConfiguration configuration) : ControllerBase
+public class PredictionController(AppDbContext context, IConfiguration configuration, IMemoryCache cache) : ControllerBase
 {
     [HttpGet("Search", Name = "SearchPropertyPredictions")]
     [SwaggerOperation("Search for property predictions")]
-    public async Task<List<Models.PropertyPrediction>> Search([FromQuery] PredictionFilter filter)
+    public async Task<ActionResult<List<Models.PropertyPrediction>>> Search([FromQuery] PredictionFilter filter)
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, configuration, "SearchPropertyPredictions", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("SearchPropertyPredictions", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+            
             await context.SaveLogEntry("SearchPropertyPredictions", "Started", "Information", executionInstanceId);
             await context.SaveLogEntry("SearchPropertyPredictions", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
 
@@ -55,14 +61,15 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             var propertyPredictions = await GetPropertyPredictionsWithPredictionStats(query);
 
             await context.SaveLogEntry("SearchPropertyPredictions", "Completed", "Information", executionInstanceId);
-            return propertyPredictions;
+            return Ok(propertyPredictions);
         }
         catch (Exception ex)
         {
             await context.SaveLogEntry("SearchPropertyPredictions", ex, executionInstanceId);
-            return null!;
+            return StatusCode(500);
         }
     }
+    
     [HttpPost]
     public async Task<ActionResult> PostPredictions(List<PostPredictionRequest> request)
     {
@@ -71,58 +78,33 @@ public class PredictionController(AppDbContext context, IConfiguration configura
 
         try
         {
+            if (!HttpContext.CheckRateLimit(cache, configuration, "PostPredictions", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("PostPredictions", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
             await context.SaveLogEntry("PostPredictions", "Started", "Information", executionInstanceId);
-            var ipAddressList = new List<string>();
-            var ipAddressLog = new StringBuilder();
-            var clientIps = HttpContext.Request.Headers["X-Azure-ClientIP"];
-            var socketIps = HttpContext.Request.Headers["X-Azure-SocketIP"];
-            var forwardedForIps = HttpContext.Request.Headers["X-Forwarded-For"];
-            var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await context.SaveLogEntry("PostPredictions", "Predictions: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
 
-            if (clientIps.Count != 0)
-            {
-                var ipAddresses = clientIps.Where(item => !string.IsNullOrWhiteSpace(item)).ToList();
-                ipAddressList.AddRange(ipAddresses!);
-                ipAddressLog.Append($"X-Azure-ClientIP: {string.Join(',', ipAddresses)}");
-            }
-
-            if (socketIps.Count != 0)
-            {
-                var ipAddresses = socketIps.Where(item => !string.IsNullOrWhiteSpace(item)).ToList();
-                ipAddressList.AddRange(ipAddresses!);
-                if (ipAddressLog.Length != 0) ipAddressLog.Append(", ");
-                ipAddressLog.Append($"X-Azure-SocketIP: {string.Join(',', ipAddresses)}");
-            }
-
-            if (forwardedForIps.Count != 0)
-            {
-                var ipAddresses = forwardedForIps.Where(item => !string.IsNullOrWhiteSpace(item)).ToList();
-                ipAddressList.AddRange(ipAddresses!);
-                if (ipAddressLog.Length != 0) ipAddressLog.Append(", ");
-                ipAddressLog.Append($"X-Forwarded-For: {string.Join(',', ipAddresses)}");
-            }
-
-            if (remoteIp != null)
-            {
-                ipAddressList.Add(remoteIp);
-                if (ipAddressLog.Length != 0) ipAddressLog.Append(", ");
-                ipAddressLog.Append($"Remote IP: {remoteIp}");
-            }
+            var ipAddressList = HttpContext.GetIpAddressesFromHeader(out var ipAddressLog);
 
             var allowedIps = await context.Validator.Where(w => w.Active == true).Select(s => s.IpAddress).Distinct().ToListAsync();
 
             await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
 
-            if (!ipAddressList.Any(ip => allowedIps.Contains(ip)))
+            if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList))
+            {
+                await context.SaveLogEntry("PostPredictions", "IP address whitelisted", "Information", executionInstanceId);
+            }
+            else if (!ipAddressList.Any(ip => allowedIps.Contains(ip)))
             {
                 await context.SaveLogEntry("PostPredictions", "IP address not allowed", "Warning", executionInstanceId);
                 await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
 
                 return StatusCode(403);
             }
-
-            await context.SaveLogEntry("PostPredictions", $"Posting {request.Count} predictions", "Information", executionInstanceId);
-
+            
             var propertyMissing = 0;
             var badPredictedOutcome = 0;
             var activePredictions = 0;
@@ -139,7 +121,7 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             foreach (var prediction in request)
             {
                 var property =
-                    await context.Property.FirstOrDefaultAsync(tg => Math.Abs(tg.Latitude - prediction.PropertyLatitude) < 0.0000001 && Math.Abs(tg.Longitude - prediction.PropertyLongitude) < 0.0000001);
+                    await context.Property.Where(p=>p.NextplaceId == prediction.NextplaceId).OrderByDescending(p=>p.ListingDate).FirstOrDefaultAsync();
 
                 if (property == null)
                 {
