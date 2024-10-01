@@ -1,3 +1,4 @@
+using Azure.Identity;
 using Nextplace.Api.Db;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,7 @@ namespace Nextplace.Api.Controllers;
 
 [Tags("Miner APIs")]
 [ApiController]
-[Route("[controller]")]
+[Route("Miner")]
 public class MinerController(AppDbContext context, IConfiguration configuration, IMemoryCache cache) : ControllerBase
 {
     [SwaggerOperation(

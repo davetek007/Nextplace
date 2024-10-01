@@ -81,7 +81,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         }
     }
 
-
     [HttpGet("Search", Name = "SearchProperties")]
     [SwaggerOperation("Search for properties")]
     public async Task<ActionResult<List<Property>>> Search([FromQuery] PropertyFilter filter)
@@ -191,17 +190,44 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 property.LastUpdateDate,
                 property.Active)
             {
-                Predictions = [],
-                Estimates = []
+                Predictions = []
             };
+            
+            var propertySalePrice = property.SalePrice ?? 0;
 
             if (property.Estimates != null)
             {
-                foreach (var estimate in property.Estimates.Where(p => p.Active))
+                var propertySaleDate = property.SaleDate ?? DateTime.MaxValue;
+                
+                var estimates = new List<PropertyEstimate>();
+                foreach (var estimate in property.Estimates.Where(p => p.Active && p.DateEstimated < propertySaleDate))
                 {
                     var tgp = new PropertyEstimate(estimate.DateEstimated, estimate.Estimate);
 
-                    tg.Estimates.Add(tgp);
+                    estimates.Add(tgp);
+                }
+
+                if (estimates.Count != 0)
+                {
+                    var firstEstimateDate = estimates.Select(p => p.EstimateDate).First();
+                    var lastEstimateDate = estimates.Select(p => p.EstimateDate).Last();
+                    var firstEstimateAmount =
+                        estimates.OrderBy(p => p.EstimateDate).Select(p => p.EstimatedAmount).First();
+                    var lastEstimateAmount = estimates.OrderByDescending(p => p.EstimateDate)
+                        .Select(p => p.EstimatedAmount)
+                        .First();
+                    var numEstimates = estimates.Count;
+                    var avgEstimate = estimates.Average(p => p.EstimatedAmount);
+                    var minEstimate = estimates.Min(p => p.EstimatedAmount);
+                    var maxEstimate = estimates.Max(p => p.EstimatedAmount);
+                    var closestEstimate = estimates.OrderBy(p => Math.Abs(p.EstimatedAmount - propertySalePrice))
+                        .Select(p => p.EstimatedAmount).First();
+
+                    var estimateStats = new PropertyEstimateStats(firstEstimateDate, lastEstimateDate, numEstimates,
+                        avgEstimate, minEstimate, maxEstimate, closestEstimate, firstEstimateAmount,
+                        lastEstimateAmount);
+
+                    tg.EstimateStats = estimateStats;
                 }
             }
 
@@ -458,23 +484,49 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 data.LastUpdateDate,
                 data.Active)
             {
-                Predictions = [],
-                Estimates = []
+                Predictions = []
             };
 
+            var propertySalePrice = data.SalePrice ?? 0;
+            
             if (data.Estimates != null)
             {
-                foreach (var estimate in data.Estimates.Where(p => p.Active))
+                var propertySaleDate = data.SaleDate ?? DateTime.MaxValue;
+                
+                var estimates = new List<PropertyEstimate>();
+                
+                foreach (var estimate in data.Estimates.Where(p => p.Active && p.DateEstimated < propertySaleDate))
                 {
                     var tgp = new PropertyEstimate(estimate.DateEstimated, estimate.Estimate);
+                    estimates.Add(tgp);
+                }
+                
+                if (estimates.Count != 0)
+                {
+                    var firstEstimateDate = estimates.Select(p => p.EstimateDate).First();
+                    var lastEstimateDate = estimates.Select(p => p.EstimateDate).Last();
+                    var firstEstimateAmount =
+                        estimates.OrderBy(p => p.EstimateDate).Select(p => p.EstimatedAmount).First();
+                    var lastEstimateAmount = estimates.OrderByDescending(p => p.EstimateDate)
+                        .Select(p => p.EstimatedAmount)
+                        .First();
+                    var numEstimates = estimates.Count;
+                    var avgEstimate = estimates.Average(p => p.EstimatedAmount);
+                    var minEstimate = estimates.Min(p => p.EstimatedAmount);
+                    var maxEstimate = estimates.Max(p => p.EstimatedAmount);
+                    var closestEstimate = estimates.OrderBy(p => Math.Abs(p.EstimatedAmount - propertySalePrice))
+                        .Select(p => p.EstimatedAmount).First();
 
-                    property.Estimates.Add(tgp);
+                    var estimateStats = new PropertyEstimateStats(firstEstimateDate, lastEstimateDate, numEstimates,
+                        avgEstimate, minEstimate, maxEstimate, closestEstimate, firstEstimateAmount,
+                        lastEstimateAmount);
+
+                    property.EstimateStats = estimateStats;
                 }
             }
 
             if (data.Predictions != null)
             {
-                var propertySalePrice = data.SalePrice ?? 0;
                 var predictions = new List<Tuple<PropertyPrediction, double>>();
                 foreach (var prediction in data.Predictions.Where(p => p.Active))
                 {
