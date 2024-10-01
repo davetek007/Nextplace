@@ -8,9 +8,11 @@ public class PropertyFilter
 
     public int ItemsPerPage { get; set; } = 10;
 
-    public string SortOrder { get; set; } = string.Empty;
+    public int TopPredictionCount { get; set; } = 10;
 
     public int? MinPredictions { get; set; } = 0;
+
+    public string SortOrder { get; set; } = string.Empty;
 
     public DateTime? ListingStartDate { get; set; } = null;
 
@@ -31,4 +33,6 @@ public class PropertyFilter
     public string? FilterString { get; set; } = null;
 
     public bool? AwaitingResult { get; set; } = null;
+
+    public bool? IncludePredictionsAndEstimates { get; set; } = null;
 }

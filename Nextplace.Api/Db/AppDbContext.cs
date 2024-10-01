@@ -15,10 +15,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
 
+    public DbSet<PropertyEstimate> PropertyEstimate => Set<PropertyEstimate>();
+
     public DbSet<Validator> Validator => Set<Validator>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<PropertyEstimate>().HasOne(tgp => tgp.Property).WithMany(m => m.Estimates)
+            .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
         modelBuilder.Entity<MinerStats>().HasOne(mr => mr.Miner).WithMany(m => m.MinerStats)
             .HasForeignKey(mr => mr.MinerId);
 

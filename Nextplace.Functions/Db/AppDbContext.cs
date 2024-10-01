@@ -21,8 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         modelBuilder.Entity<PropertyEstimate>().HasOne(tgp => tgp.Property).WithMany(m => m.Estimates)
             .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-
-
+        
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             modelBuilder.Entity(entityType.ClrType)

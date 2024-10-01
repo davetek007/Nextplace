@@ -8,6 +8,7 @@ using PropertyPrediction = Nextplace.Api.Models.PropertyPrediction;
 using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
 using Microsoft.Extensions.Caching.Memory;
+using PropertyEstimate = Nextplace.Api.Models.PropertyEstimate;
 
 namespace Nextplace.Api.Controllers;
 
@@ -101,7 +102,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
 
             var query = context.Property
-                .Include(tg => tg.Predictions)
+                .Include(tg => tg.Predictions)!.ThenInclude(p=>p.Miner)
+                .Include(tg => tg.Estimates)
                 .AsQueryable();
 
             query = ApplyDateFilters(query, filter);
@@ -121,7 +123,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
             query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
 
-            var properties = await GetProperties(query);
+            var properties = await GetProperties(query, filter);
 
             await context.SaveLogEntry("SearchProperties", "Completed", "Information", executionInstanceId);
             return Ok(properties);
@@ -148,7 +150,9 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             }
             
             await context.SaveLogEntry("GetProperty", "Started", "Information", executionInstanceId);
-            var property = await context.Property.Include(tg => tg.Predictions)!
+            var property = await context.Property
+                .Include(tg=>tg.Estimates)
+                .Include(tg => tg.Predictions)!
                 .ThenInclude(propertyPrediction => propertyPrediction.Miner).OrderByDescending(p=>p.ListingDate)
                 .FirstOrDefaultAsync(tg => tg.NextplaceId == nextplaceId);
 
@@ -158,6 +162,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 await context.SaveLogEntry("GetProperty", "Completed", "Information", executionInstanceId);
                 return NotFound();
             }
+            
             var tg = new Property(
                 property.Id,
                 property.PropertyId,
@@ -186,9 +191,19 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 property.LastUpdateDate,
                 property.Active)
             {
-                Predictions = new List<PropertyPrediction>()
+                Predictions = [],
+                Estimates = []
             };
 
+            if (property.Estimates != null)
+            {
+                foreach (var estimate in property.Estimates.Where(p => p.Active))
+                {
+                    var tgp = new PropertyEstimate(estimate.DateEstimated, estimate.Estimate);
+
+                    tg.Estimates.Add(tgp);
+                }
+            }
 
             if (property.Predictions != null)
             {
@@ -196,7 +211,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 {
                     var tgp = new PropertyPrediction(prediction.Miner.HotKey,
                         prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
-                        prediction.PredictedSaleDate, null!);
+                        prediction.PredictedSaleDate);
 
                     tg.Predictions.Add(tgp);
                 }
@@ -301,6 +316,19 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             return StatusCode(500);
         }
     }
+    
+    private static IQueryable<PropertyContext> ApplyMinPredictionsFilter(IQueryable<PropertyContext> query, PropertyFilter filter)
+    {
+        if (filter.MinPredictions.HasValue)
+        {
+            var minPredictions = Math.Clamp(filter.MinPredictions.Value, 0, 50);
+
+            query = query.Where(tg =>
+                tg.Predictions!.Count(p => p.Active) >= minPredictions);
+        }
+
+        return query;
+    }
 
     private static IQueryable<PropertyContext> ApplyDateFilters(IQueryable<PropertyContext> query, PropertyFilter filter)
     {
@@ -374,19 +402,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         return query;
     }
 
-    private static IQueryable<PropertyContext> ApplyMinPredictionsFilter(IQueryable<PropertyContext> query, PropertyFilter filter)
-    {
-        if (filter.MinPredictions.HasValue)
-        {
-            var minPredictions = Math.Clamp(filter.MinPredictions.Value, 0, 50);
-
-            query = query.Where(tg =>
-                tg.Predictions!.Count(p => p.Active) >= minPredictions);
-        }
-        
-        return query;
-    }
-
     private static IQueryable<PropertyContext> ApplySortOrder(IQueryable<PropertyContext> query, string sortOrder)
     {
         return sortOrder switch
@@ -407,7 +422,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         };
     }
 
-    private static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query)
+    private static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query, PropertyFilter filter)
     {
         var properties = new List<Property>();
 
@@ -415,7 +430,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
         foreach (var data in results)
         {
-            properties.Add(new Property(
+            var property = new Property(
                 data.Id,
                 data.PropertyId,
                 data.NextplaceId,
@@ -441,8 +456,43 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 data.SalePrice,
                 data.CreateDate,
                 data.LastUpdateDate,
-                data.Active));
+                data.Active)
+            {
+                Predictions = [],
+                Estimates = []
+            };
 
+            if (data.Estimates != null)
+            {
+                foreach (var estimate in data.Estimates.Where(p => p.Active))
+                {
+                    var tgp = new PropertyEstimate(estimate.DateEstimated, estimate.Estimate);
+
+                    property.Estimates.Add(tgp);
+                }
+            }
+
+            if (data.Predictions != null)
+            {
+                var propertySalePrice = data.SalePrice ?? 0;
+                var predictions = new List<Tuple<PropertyPrediction, double>>();
+                foreach (var prediction in data.Predictions.Where(p => p.Active))
+                {
+                    var tgp = new PropertyPrediction(prediction.Miner.HotKey,
+                        prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
+                        prediction.PredictedSaleDate);
+
+                    var priceDiff = Math.Abs(propertySalePrice - tgp.PredictedSalePrice);
+
+                    predictions.Add(new Tuple<PropertyPrediction, double>(tgp, priceDiff));
+                }
+
+                var returnedPredictions = predictions.OrderBy(p => p.Item2).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
+
+                property.Predictions.AddRange(returnedPredictions);
+            }
+
+            properties.Add(property);
         }
 
         return properties;

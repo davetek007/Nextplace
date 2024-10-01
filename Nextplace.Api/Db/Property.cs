@@ -62,4 +62,7 @@ public sealed class Property : EntityTableData
 
     // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<PropertyPrediction>? Predictions { get; init; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<PropertyEstimate>? Estimates { get; init; }
 }

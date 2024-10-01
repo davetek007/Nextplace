@@ -2,7 +2,7 @@
 
 namespace Nextplace.Api.Models;
 
-public class PropertyPrediction(string minerHotKey, string minerColdKey, DateTime predictionDate, double predictedSalePrice, DateTime predictedSaleDate, List<MinerStats> minerStats)
+public class PropertyPrediction(string minerHotKey, string minerColdKey, DateTime predictionDate, double predictedSalePrice, DateTime predictedSaleDate)
 {
     [Required]
     public string MinerHotKey { get; } = minerHotKey;
@@ -18,8 +18,4 @@ public class PropertyPrediction(string minerHotKey, string minerColdKey, DateTim
 
     [Required]
     public DateTime PredictedSaleDate { get; } = predictedSaleDate;
-
-    public List<MinerStats>? MinerStats { get; } = minerStats;
-
-    public Property? Property { get; set; } 
 }

@@ -11,7 +11,7 @@ builder.Host.ConfigureAppConfiguration((hostingContext, config) =>
         .AddEnvironmentVariables();
 });
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new ApplicationException("DefaultConnection is not set");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new ApplicationException("DefaultConnection is not set"); 
 
 builder.Services.AddMemoryCache();
 
