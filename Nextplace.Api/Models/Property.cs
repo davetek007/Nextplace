@@ -102,6 +102,5 @@ public class Property(
     [Required]
     public List<PropertyPrediction> Predictions { get; set; } = null!;
 
-    [Required]
-    public PropertyEstimateStats EstimateStats { get; set; } = null!;
+    public PropertyEstimateStats? EstimateStats { get; set; } = null!;
 }
