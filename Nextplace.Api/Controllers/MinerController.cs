@@ -1,10 +1,10 @@
-using Azure.Identity;
 using Nextplace.Api.Db;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
 using Miner = Nextplace.Api.Models.Miner;
 using Microsoft.Extensions.Caching.Memory;
+using Nextplace.Api.Models;
 
 namespace Nextplace.Api.Controllers;
 
@@ -16,7 +16,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
     [SwaggerOperation(
         "Get miner stats")]
     [HttpGet("Stats", Name = "Stats")]
-    public async Task<ActionResult<List<Models.MinerStats>>> GetMinerStats()
+    public async Task<ActionResult<List<MinerStats>>> GetMinerStats()
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
@@ -30,16 +30,21 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
 
             await context.SaveLogEntry("GetMinerStats", "Started", "Information", executionInstanceId);
 
-            var stats = await context.MinerStats.Include(minerRanking => minerRanking.Miner).ToListAsync();
+            var miners = await context.Miner.Where(m => m.Active).ToListAsync();
 
-            var l = (from stat in stats
-                let minerDbEntry = stat.Miner
-                let miner =
-                    new Miner(minerDbEntry.HotKey, minerDbEntry.ColdKey, minerDbEntry.CreateDate,
-                        minerDbEntry.LastUpdateDate, minerDbEntry.Active)
-                select new Models.MinerStats(miner, stat.Ranking, stat.StatType, stat.NumberOfPredictions,
-                    stat.CorrectPredictions)).ToList();
+            var ranking = 0;
             
+            var l = new List<MinerStats>();
+
+            foreach (var miner in miners.OrderByDescending(m => m.Incentive))
+            {
+                var minerStats = new MinerStats(new Miner(miner.HotKey, miner.ColdKey, miner.CreateDate,
+                    miner.LastUpdateDate, miner.Active, miner.Incentive), ++ranking);
+
+                l.Add(minerStats);
+            }
+
+
             Response.AppendCorsHeaders();
 
             await context.SaveLogEntry("GetMinerStats", "Completed", "Information", executionInstanceId);

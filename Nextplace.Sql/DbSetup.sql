@@ -87,14 +87,21 @@ create table dbo.PropertyPrediction (
 	active bit not null)
 go  
 
-create table dbo.MinerStats (
-	id bigint identity (1,1) primary key not null,
-	minerId bigint foreign key references dbo.Miner (id) not null,  
-	createDate datetime2 not null, 
-	statType nvarchar(450) not null,
-	ranking int not null,
-	numberOfPredictions int not null,
-	correctPredictions int not null)
+create table dbo.PropertyEstimateStats (
+	id bigint identity (1,1) primary key not null, 
+	propertyId bigint foreign key references dbo.Property (id) not null,
+	firstEstimateDate datetime2 not null,
+	lastEstimateDate datetime2 not null,
+	firstEstimateAmount float(53) not null,
+	lastEstimateAmount float(53) not null,
+	numEstimate int not null,
+	minEstimate float(53) not null,
+	maxEstimate float(53) not null,
+	avgEstimate float(53) not null,
+	closestEstimate float(53) not null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
 go
 
 create table dbo.ApiLog (
@@ -113,4 +120,13 @@ create nonclustered index ixnPropertyListingIdPropertyId on dbo.Property (listin
 go
 
 create nonclustered index ixnPropertyNextplaceId on dbo.Property (nextplaceId) include (listingDate)
+go
+
+CREATE INDEX IX_Property_SaleDate_Active ON Property (SaleDate, Id, Active);
+CREATE INDEX IX_PropertyPrediction_PropertyId_Active ON PropertyPrediction (PropertyId, Active);
+CREATE INDEX IX_Property_ListingDate_Id ON Property (ListingDate, Id);
+CREATE INDEX IX_PropertyPrediction_PropertyId_Id ON PropertyPrediction (PropertyId, Id);
+CREATE INDEX IX_Property_Covering ON Property (Id, SaleDate, ListingDate, Active);
+CREATE INDEX IX_PropertyPrediction_PredictionData ON PropertyPrediction (PropertyId, Active, PredictedSaleDate, PredictedSalePrice);
+CREATE INDEX IX_PropertyEstimate_PropertyId_Estimate ON PropertyEstimate (PropertyId, Estimate);
 go

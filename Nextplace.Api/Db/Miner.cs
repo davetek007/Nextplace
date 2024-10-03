@@ -6,7 +6,6 @@ namespace Nextplace.Api.Db;
 
 public sealed class Miner : EntityTableData
 {
-
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public new long Id { get; init; }
@@ -27,7 +26,4 @@ public sealed class Miner : EntityTableData
 
     // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<PropertyPrediction>? Predictions { get; init; }
-
-    // ReSharper disable once CollectionNeverUpdated.Global
-    public ICollection<MinerStats>? MinerStats { get; init; }
 }

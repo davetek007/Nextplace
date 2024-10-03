@@ -7,26 +7,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Miner> Miner => Set<Miner>();
 
-    public DbSet<MinerStats> MinerStats => Set<MinerStats>();
-
     public DbSet<Property> Property => Set<Property>();
+
+    public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
 
     public DbSet<ApiLog> ApiLog => Set<ApiLog>();
 
     public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
 
-    public DbSet<PropertyEstimate> PropertyEstimate => Set<PropertyEstimate>();
-
     public DbSet<Validator> Validator => Set<Validator>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<PropertyEstimate>().HasOne(tgp => tgp.Property).WithMany(m => m.Estimates)
+        modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
             .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<MinerStats>().HasOne(mr => mr.Miner).WithMany(m => m.MinerStats)
-            .HasForeignKey(mr => mr.MinerId);
-
+        
         modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)
             .HasForeignKey(tgp => tgp.MinerId);
 

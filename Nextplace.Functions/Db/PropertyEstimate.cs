@@ -12,7 +12,6 @@ public sealed class PropertyEstimate : EntityTableData
 
     public required long PropertyId { get; init; }
 
-    // ReSharper disable once EntityFramework.ModelValidation.UnlimitedStringLength
     public required DateTime DateEstimated { get; set; }
 
     public required double Estimate { get; set; }
