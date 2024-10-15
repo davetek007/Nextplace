@@ -90,15 +90,17 @@ public sealed class SyncProperties(ILoggerFactory loggerFactory, IConfiguration 
                     
                     var saleDate = homeData.LastSaleData?.LastSoldDate ?? null;
                     
-                    if (saleDate == null)
+                    if (saleDate == null || saleDate < property.ListingDate)
                     {
                         continue;
                     }
                     
                     var salePrice = homeData.PriceInfo.Amount;
-
+                    
                     property.SaleDate = saleDate;
                     property.SalePrice = salePrice;
+                    
+                    
                     property.LastUpdateDate = DateTime.UtcNow;
                 }
 
