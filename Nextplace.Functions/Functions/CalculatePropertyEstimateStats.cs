@@ -18,21 +18,39 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
             _logger.LogInformation($"CalculatePropertyEstimateStats executed at: {DateTime.UtcNow}");
             await context.SaveLogEntry("CalculatePropertyEstimateStats", "Started", "Information", executionInstanceId);
 
-            var properties = context.Property
+            context.Database.SetCommandTimeout(2000);
+
+            const int batchSize = 1000;
+            var totalProperties = context.Property
                 .Include(p => p.Estimates)
                 .Include(p => p.EstimateStats)
-                .Where(p => p.Active && p.Estimates!.Any() &&
-                            p.EstimateStats!.Count(e => e.Active && e.CreateDate > DateTime.UtcNow.AddHours(-1)) == 0)
-                .ToList();
-            
-            await context.SaveLogEntry("CalculatePropertyEstimateStats", $"Calculating Stats for {properties.Count} properties", "Information", executionInstanceId);
-            
-            foreach (var property in properties)
+                .Count(p => p.Active && p.Estimates!.Any() &&
+                            p.EstimateStats!.Count(e => e.Active && e.CreateDate > DateTime.UtcNow.AddHours(-1)) == 0);
+
+            await context.SaveLogEntry("CalculatePropertyEstimateStats", $"Total properties to process: {totalProperties}", "Information", executionInstanceId);
+
+
+            for (var i = 0; i < totalProperties; i += batchSize)
             {
-                await CalculateStats(property);
+                var propertiesBatch = context.Property
+                    .Include(p => p.Estimates)
+                    .Include(p => p.EstimateStats)
+                    .Where(p => p.Active && p.Estimates!.Any() &&
+                                p.EstimateStats!.Count(e => e.Active && e.CreateDate > DateTime.UtcNow.AddHours(-1)) == 0)
+                    .Skip(i)
+                    .Take(batchSize)
+                    .ToList();
+
+                await context.SaveLogEntry("CalculatePropertyEstimateStats", $"Calculating Stats for batch {i / batchSize + 1} of {totalProperties / batchSize + 1}", "Information", executionInstanceId);
+
+                foreach (var property in propertiesBatch)
+                {
+                    await CalculateStats(property);
+                }
+
+                await context.SaveChangesAsync();
             }
-            await context.SaveChangesAsync();
-            
+
             if (myTimer.ScheduleStatus is not null)
             {
                 _logger.LogInformation(
