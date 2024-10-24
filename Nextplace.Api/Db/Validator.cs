@@ -13,5 +13,14 @@ public sealed class Validator : EntityTableData
     [MaxLength(450)]
     public required string IpAddress { get; init; }
 
+    [MaxLength(450)]
+    public required string HotKey { get; init; }
+
+    [MaxLength(450)]
+    public required string ColdKey { get; init; }
+
     public bool Active { get; set; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<PropertyPrediction>? Predictions { get; init; }
 }

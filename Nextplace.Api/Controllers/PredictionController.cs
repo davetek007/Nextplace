@@ -32,8 +32,9 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             await context.SaveLogEntry("PostPredictions", "Predictions: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
 
             var ipAddressList = HttpContext.GetIpAddressesFromHeader(out var ipAddressLog);
-
-            var allowedIps = await context.Validator.Where(w => w.Active == true).Select(s => s.IpAddress).Distinct().ToListAsync();
+             
+            var validators = await context.Validator.Where(w => w.Active == true).ToListAsync();
+            var matchingValidator = validators.FirstOrDefault(v => ipAddressList.Contains(v.IpAddress));
 
             await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
 
@@ -41,12 +42,16 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             {
                 await context.SaveLogEntry("PostPredictions", "IP address whitelisted", "Information", executionInstanceId);
             }
-            else if (!ipAddressList.Any(ip => allowedIps.Contains(ip)))
+            else if (matchingValidator == null)
             {
                 await context.SaveLogEntry("PostPredictions", "IP address not allowed", "Warning", executionInstanceId);
                 await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
 
                 return StatusCode(403);
+            }
+            else
+            {
+                await context.SaveLogEntry("PostPredictions", $"IP address returned for validator {matchingValidator.HotKey} (ID: {matchingValidator.Id})", "Information", executionInstanceId);
             }
             
             var propertyMissing = 0;
@@ -107,7 +112,17 @@ public class PredictionController(AppDbContext context, IConfiguration configura
                     Active = true,
                     LastUpdateDate = DateTime.UtcNow
                 };
+                
+                if (prediction.PredictionScore.HasValue)
+                {
+                    dbEntry.PredictionScore = prediction.PredictionScore.Value;
+                }
 
+                if (matchingValidator != null)
+                {
+                    dbEntry.ValidatorId = matchingValidator.Id;
+                }
+                
                 inserted++;
 
                 context.PropertyPrediction.Add(dbEntry);

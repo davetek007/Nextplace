@@ -21,9 +21,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
             .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-        
+
         modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)
             .HasForeignKey(tgp => tgp.MinerId);
+
+        modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.Predictions)
+            .HasForeignKey(tgp => tgp.ValidatorId);
 
         modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Property).WithMany(m => m.Predictions)
             .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
