@@ -14,7 +14,7 @@ public sealed class PropertyPrediction : EntityTableData
 
     public required long MinerId { get; init; }
 
-    public long ValidatorId { get; set; }
+    public long? ValidatorId { get; set; }
 
     public required DateTime PredictionDate { get; set; }
 
@@ -32,7 +32,7 @@ public sealed class PropertyPrediction : EntityTableData
 
     public Miner Miner { get; init; } = null!;
 
-    public Validator Validator { get; init; } = null!;
+    public Validator? Validator { get; init; } 
 
     public Property Property { get; init; } = null!;
 }
