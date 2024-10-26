@@ -76,6 +76,18 @@ create table dbo.Validator (
 	active bit not null)
 go
 
+create table dbo.MinerScore (
+	id bigint identity (1,1) primary key not null,
+	minerId bigint foreign key references dbo.Miner (id) not null, 
+	validatorId bigint foreign key references dbo.Validator (id), 
+	score float(53) not null,
+	numPredictions int not null,
+	scoreGenerationDate datetime2 not null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go  
+
 create table dbo.PropertyPrediction (
 	id bigint identity (1,1) primary key not null,
 	minerId bigint foreign key references dbo.Miner (id) not null, 

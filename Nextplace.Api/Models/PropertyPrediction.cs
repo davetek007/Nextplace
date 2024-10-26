@@ -18,4 +18,6 @@ public class PropertyPrediction(string minerHotKey, string minerColdKey, DateTim
 
     [Required]
     public DateTime PredictedSaleDate { get; } = predictedSaleDate;
+
+    public Property? Property { get; set; }
 }

@@ -20,5 +20,17 @@ public class Miner(string hotKey, string coldKey, DateTime? firstSeenOnSubnetDat
     public bool ActiveOnSubnet { get; } = activeOnSubnet;
 
     [Required]
-    public double Incentive{ get; } = incentive;
+    public double Incentive { get; } = incentive;
+
+    public double? MinScore { get; init; }
+
+    public double? AvgScore { get; init; }
+
+    public double? MaxScore { get; init; }
+
+    public int? NumScores { get; init; }
+
+    public int? NumPredictions { get; init; }
+
+    public DateTime? ScoreGenerationDate { get; init; }
 }

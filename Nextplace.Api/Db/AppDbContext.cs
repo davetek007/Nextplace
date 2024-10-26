@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<ApiLog> ApiLog => Set<ApiLog>();
 
+    public DbSet<MinerScore> MinerScore => Set<MinerScore>();
+
     public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
 
     public DbSet<Validator> Validator => Set<Validator>();
@@ -30,7 +32,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Property).WithMany(m => m.Predictions)
             .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-      
+
+        modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Miner).WithMany(m => m.Scores)
+            .HasForeignKey(tgp => tgp.MinerId);
+
+        modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Validator).WithMany(m => m.MinerScores)
+            .HasForeignKey(tgp => tgp.ValidatorId);
+
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             modelBuilder.Entity(entityType.ClrType)
