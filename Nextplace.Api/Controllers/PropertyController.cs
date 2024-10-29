@@ -88,7 +88,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
         try
         {
-            const int resultCount = 10000;
+            const int resultCount = 100000;
             if (!HttpContext.CheckRateLimit(cache, config, "GetTrainingData", out var offendingIpAddress))
             {
                 await context.SaveLogEntry("GetTrainingData", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
