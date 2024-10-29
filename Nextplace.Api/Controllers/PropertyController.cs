@@ -80,6 +80,116 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         }
     }
 
+    [HttpGet("Training", Name = "GetTrainingData")]
+    [SwaggerOperation("Get property training data")]
+    public async Task<ActionResult<List<Property>>> GetTrainingData()
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            const int resultCount = 10000;
+            if (!HttpContext.CheckRateLimit(cache, config, "GetTrainingData", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetTrainingData", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("GetTrainingData", "Started", "Information", executionInstanceId);
+
+            List<Property> properties;
+            const string cacheKey = "GetTrainingData";
+            if (cache.TryGetValue(cacheKey, out var cachedData))
+            {
+                properties = (List<Property>)cachedData!;
+                await context.SaveLogEntry("GetTrainingData", "Obtained from cache", "Information", executionInstanceId);
+            }
+            else
+            {
+                var results = await context.Property
+                    .OrderByDescending(p => p.LastUpdateDate)
+                    .Take(resultCount).ToListAsync();
+
+
+                properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
+                            data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
+                            data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
+                            data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
+                            data.SaleDate, data.SalePrice, data.CreateDate, data.LastUpdateDate, data.Active)
+                { Predictions = [] })
+                    .ToList();
+
+                await context.SaveLogEntry("GetTrainingData", "Obtained from DB", "Information", executionInstanceId);
+
+                cache.Set(cacheKey, properties, TimeSpan.FromHours(12));
+            }
+
+            Response.AppendCorsHeaders();
+
+            await context.SaveLogEntry("GetTrainingData", "Completed", "Information", executionInstanceId);
+            return Ok(properties);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("GetTrainingData", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+
+    [HttpGet("Current", Name = "GetCurrentProperties")]
+    [SwaggerOperation("Get current properties")]
+    public async Task<ActionResult<List<Property>>> GetCurrentProperties()
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!HttpContext.CheckRateLimit(cache, config, "GetCurrentProperties", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetCurrentProperties", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("GetCurrentProperties", "Started", "Information", executionInstanceId);
+
+            List<Property> properties;
+            const string cacheKey = "GetCurrentProperties";
+            if (cache.TryGetValue(cacheKey, out var cachedData))
+            {
+                properties = (List<Property>)cachedData!;
+                await context.SaveLogEntry("GetCurrentProperties", "Obtained from cache", "Information", executionInstanceId);
+            }
+            else
+            {
+                var results = await context.Property
+                    .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5))
+                    .ToListAsync();
+
+                properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
+                            data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
+                            data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
+                            data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
+                            data.SaleDate, data.SalePrice, data.CreateDate, data.LastUpdateDate, data.Active)
+                { Predictions = [] })
+                    .ToList();
+
+                await context.SaveLogEntry("GetCurrentProperties", "Obtained from DB", "Information", executionInstanceId);
+
+                cache.Set(cacheKey, properties, TimeSpan.FromHours(12));
+            }
+
+            Response.AppendCorsHeaders();
+
+            await context.SaveLogEntry("GetCurrentProperties", "Completed", "Information", executionInstanceId);
+            return Ok(properties);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("GetCurrentProperties", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+
     [HttpGet("Search", Name = "SearchProperties")]
     [SwaggerOperation("Search for properties")]
     public async Task<ActionResult<List<Property>>> Search([FromQuery] PropertyFilter filter)

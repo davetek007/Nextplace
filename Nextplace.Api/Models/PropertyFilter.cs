@@ -33,6 +33,4 @@ public class PropertyFilter
     public string? FilterString { get; set; } = null;
 
     public bool? AwaitingResult { get; set; } = null;
-
-    public bool? IncludePredictionsAndEstimates { get; set; } = null;
 }
