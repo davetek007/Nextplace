@@ -2,11 +2,11 @@
   "profiles": {
     "Nextplace.Functions": {
       "commandName": "Project",
-      "commandLineArgs": "--port 7198 --csharp --verbose",
+      "commandLineArgs": "--port 7015",
+      "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "nativeDebugging": false
+      }
     }
   }
 }

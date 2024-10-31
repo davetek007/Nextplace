@@ -24,7 +24,7 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
             var totalProperties = context.Property
                 .Include(p => p.Estimates)
                 .Include(p => p.EstimateStats)
-                .Count(p => p.Active && p.Estimates!.Any() &&
+                .Count(p => p.Active && p.Estimates!.Any() && p.SaleDate == null &&
                             p.EstimateStats!.Count(e => e.Active && e.CreateDate > DateTime.UtcNow.AddHours(-1)) == 0);
 
             await context.SaveLogEntry("CalculatePropertyEstimateStats", $"Total properties to process: {totalProperties}", "Information", executionInstanceId);
@@ -35,7 +35,7 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
                 var propertiesBatch = context.Property
                     .Include(p => p.Estimates)
                     .Include(p => p.EstimateStats)
-                    .Where(p => p.Active && p.Estimates!.Any() &&
+                    .Where(p => p.Active && p.Estimates!.Any() && p.SaleDate == null &&
                                 p.EstimateStats!.Count(e => e.Active && e.CreateDate > DateTime.UtcNow.AddHours(-1)) == 0)
                     .Skip(i)
                     .Take(batchSize)
