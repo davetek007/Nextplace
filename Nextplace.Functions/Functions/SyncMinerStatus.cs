@@ -53,23 +53,25 @@ public sealed class SyncMinerStatus(ILoggerFactory loggerFactory, IConfiguration
                     miner.LastUpdateDate = DateTime.UtcNow;
                     miner.Active = true;
                     miner.Incentive = minerDetails.Incentive;
+                    miner.Uid = minerDetails.NeuronId;
 
                     updates++;
                 }
             }
 
-            foreach (var keyPair in minersRegisteredOnSubnet)
+            foreach (var item in minersRegisteredOnSubnet)
             {
-                if (minersInDb.Any(m => m.HotKey == keyPair.Hotkey.Ss58 && m.ColdKey == keyPair.Coldkey.Ss58))
+                if (minersInDb.Any(m => m.HotKey == item.Hotkey.Ss58 && m.ColdKey == item.Coldkey.Ss58))
                 {
                     continue;
                 }
 
                 var miner = new Miner
                 {
-                    HotKey = keyPair.Hotkey.Ss58,
-                    ColdKey = keyPair.Coldkey.Ss58,
-                    Incentive = keyPair.Incentive,
+                    HotKey = item.Hotkey.Ss58,
+                    ColdKey = item.Coldkey.Ss58,
+                    Incentive = item.Incentive,
+                    Uid = item.NeuronId,
                     CreateDate = DateTime.UtcNow,
                     LastUpdateDate = DateTime.UtcNow,
                     Active = true

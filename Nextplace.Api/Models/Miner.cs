@@ -2,7 +2,7 @@
 
 namespace Nextplace.Api.Models;
 
-public class Miner(string hotKey, string coldKey, DateTime? firstSeenOnSubnetDate, DateTime? lastSeenOnSubnetDate, bool activeOnSubnet, double incentive)
+public class Miner(string hotKey, string coldKey, DateTime? firstSeenOnSubnetDate, DateTime? lastSeenOnSubnetDate, bool activeOnSubnet, double incentive, int uid)
 {
     [Required]
     public string HotKey { get; } = hotKey;
@@ -18,6 +18,9 @@ public class Miner(string hotKey, string coldKey, DateTime? firstSeenOnSubnetDat
 
     [Required]
     public bool ActiveOnSubnet { get; } = activeOnSubnet;
+
+    [Required]
+    public int Uid { get; } = uid;
 
     [Required]
     public double Incentive { get; } = incentive;

@@ -18,6 +18,8 @@ public sealed class Miner : EntityTableData
 
     public required double Incentive { get; set; }
 
+    public required int Uid { get; set; }
+
     public required DateTime CreateDate { get; set; }
 
     public required DateTime LastUpdateDate { get; set; }

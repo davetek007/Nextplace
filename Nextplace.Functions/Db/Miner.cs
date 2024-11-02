@@ -16,6 +16,8 @@ public sealed class Miner : EntityTableData
     [MaxLength(100)]
     public required string ColdKey { get; init; }
 
+    public required int Uid { get; set; }
+
     public required double Incentive { get; set; }
 
     public required DateTime CreateDate { get; set; }

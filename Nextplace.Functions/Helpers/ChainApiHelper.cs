@@ -44,6 +44,17 @@ internal class ChainApiHelper(IConfiguration configuration)
     {
         var metagraph = await GetMetagraph();
 
-        return metagraph;
+        var items = new List<Item>();
+        foreach (var item in metagraph.Where(item => item.ValidatorTrust == 0))
+        {
+            if (item.AxonInfo == null || string.IsNullOrWhiteSpace(item.AxonInfo.Ip))
+            {
+                continue;
+            }
+
+            items.Add(item);
+        }
+
+        return items;
     }
 }

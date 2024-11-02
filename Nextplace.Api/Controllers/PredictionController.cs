@@ -154,7 +154,8 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             Active = true,
             CreateDate = DateTime.UtcNow,
             LastUpdateDate = DateTime.UtcNow, 
-            Incentive = 0
+            Incentive = 0, 
+            Uid = 0
         };
 
         context.Miner.Add(miner);

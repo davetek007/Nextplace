@@ -28,8 +28,7 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
                             p.EstimateStats!.Count(e => e.Active && e.CreateDate > DateTime.UtcNow.AddHours(-1)) == 0);
 
             await context.SaveLogEntry("CalculatePropertyEstimateStats", $"Total properties to process: {totalProperties}", "Information", executionInstanceId);
-
-
+            
             for (var i = 0; i < totalProperties; i += batchSize)
             {
                 var propertiesBatch = context.Property
@@ -45,7 +44,7 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
 
                 foreach (var property in propertiesBatch)
                 {
-                    await CalculateStats(property);
+                    CalculateStats(property);
                 }
 
                 await context.SaveChangesAsync();
@@ -64,7 +63,7 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
         }
     }
 
-    private async Task CalculateStats(Property property)
+    private void CalculateStats(Property property)
     {
         var propertySaleDate = property.SaleDate ?? DateTime.MaxValue;
         var propertySalePrice = property.SalePrice ?? 0;

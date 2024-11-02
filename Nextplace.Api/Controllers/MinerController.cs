@@ -64,7 +64,8 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                     dbEntry.CreateDate,
                     dbEntry.LastUpdateDate,
                     dbEntry.Active,
-                    dbEntry.Incentive)
+                    dbEntry.Incentive, 
+                    dbEntry.Uid)
                 {
                     AvgScore = avgScore, MaxScore = maxScore, MinScore = minScore, NumPredictions = numPredictions,
                     NumScores = numScores, ScoreGenerationDate = scoreGenerationDate
@@ -204,7 +205,8 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
             Active = true,
             CreateDate = DateTime.UtcNow,
             LastUpdateDate = DateTime.UtcNow,
-            Incentive = 0
+            Incentive = 0, 
+            Uid = 0
         };
 
         context.Miner.Add(miner);

@@ -47,15 +47,6 @@ create table dbo.PropertyEstimate (
 	active bit not null)
 go
 
-create table dbo.Market (
-	id int identity(1,1) primary key not null, 
-	name nvarchar(450) not null, 
-	externalId nvarchar(450) not null,
-	[createDate] [datetime2](7) NOT NULL,
-	[lastUpdateDate] [datetime2](7) NOT NULL,
-	[active] [bit] NOT NULL)
-go
-
 create table dbo.FunctionLog (
 	id bigint identity (1,1) primary key not null,
 	functionName nvarchar(450) not null,	
@@ -74,6 +65,17 @@ create table dbo.Validator (
 	createDate datetime2 not null,
 	lastUpdateDate datetime2 not null,
 	active bit not null)
+go
+
+CREATE TABLE [dbo].[Miner](
+	id bigint identity (1,1) primary key not null,
+	[hotKey] [nvarchar](100) NOT NULL,
+	[coldKey] [nvarchar](100) NOT NULL,
+	uid int NOT NULL,
+	[incentive] [float] NOT NULL,
+	[createDate] [datetime2](7) NOT NULL,
+	[lastUpdateDate] [datetime2](7) NOT NULL,
+	[active] [bit] NOT NULL)
 go
 
 create table dbo.MinerScore (
