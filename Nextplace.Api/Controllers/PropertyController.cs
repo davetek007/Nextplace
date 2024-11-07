@@ -446,6 +446,16 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             query = query.Where(tg => tg.ListingDate <= filter.ListingEndDate.Value);
         }
 
+        if (filter.SaleDateStartDate.HasValue)
+        {
+            query = query.Where(tg => tg.SaleDate >= filter.SaleDateStartDate.Value);
+        }
+
+        if (filter.SaleDateEndDate.HasValue)
+        {
+            query = query.Where(tg => tg.SaleDate <= filter.SaleDateEndDate.Value);
+        }
+
         if (filter.LastUpdateDate.HasValue)
         {
             query = query.Where(tg => tg.LastUpdateDate > filter.LastUpdateDate.Value);

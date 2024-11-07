@@ -53,7 +53,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                     minScore = scores.Min(s => s.Score);
                     avgScore = scores.Average(s => s.Score);
                     maxScore = scores.Max(s => s.Score);
-                    numScores = scores.Count;
+                    numScores = scores.Select(s => s.ValidatorId).Distinct().Count();
                     numPredictions = scores.Max(s => s.NumPredictions);
                     scoreGenerationDate = scores.Max(s => s.ScoreGenerationDate);
                 }

@@ -18,6 +18,10 @@ public class PropertyFilter
 
     public DateTime? ListingEndDate { get; set; } = null;
 
+    public DateTime? SaleDateStartDate { get; set; } = null;
+
+    public DateTime? SaleDateEndDate { get; set; } = null;
+
     public DateTime? LastUpdateDate { get; set; } = null;
 
     public string? Market { get; set; } = null;
