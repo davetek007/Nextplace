@@ -2,7 +2,7 @@
 
 namespace Nextplace.Api.Models;
 
-public class PostMinerScoreRequest(string minerHotKey, string minerColdKey, float minerScore, int numPredictions, DateTime scoreGenerationDate)
+public class PostMinerScoreRequest(string minerHotKey, string minerColdKey, float minerScore, int numPredictions, DateTime scoreGenerationDate, int totalPredictions)
 {
     [Required]
     public string MinerHotKey { get; } = minerHotKey;
@@ -15,6 +15,9 @@ public class PostMinerScoreRequest(string minerHotKey, string minerColdKey, floa
 
     [Required]
     public int NumPredictions { get; } = numPredictions;
+
+    [Required]
+    public int TotalPredictions { get; } = totalPredictions;
 
     [Required]
     public DateTime ScoreGenerationDate { get; } = scoreGenerationDate;

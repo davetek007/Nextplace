@@ -15,8 +15,10 @@ public sealed class MinerScore : EntityTableData
     public long? ValidatorId { get; set; }
 
     public required double Score { get; set; }
-     
+
     public required int NumPredictions { get; set; }
+
+    public required int TotalPredictions { get; set; }
 
     public required DateTime ScoreGenerationDate { get; set; }
 

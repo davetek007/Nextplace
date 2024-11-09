@@ -35,5 +35,9 @@ public class Miner(string hotKey, string coldKey, DateTime? firstSeenOnSubnetDat
 
     public int? NumPredictions { get; init; }
 
+    public int? TotalPredictions { get; init; }
+
     public DateTime? ScoreGenerationDate { get; init; }
+    
+    public List<MinerScore>? MinerScores { get; init; }
 }

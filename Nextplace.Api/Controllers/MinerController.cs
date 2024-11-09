@@ -6,6 +6,8 @@ using Miner = Nextplace.Api.Models.Miner;
 using Microsoft.Extensions.Caching.Memory;
 using Nextplace.Api.Models;
 using Newtonsoft.Json;
+using MinerScore = Nextplace.Api.Models.MinerScore;
+using Validator = Nextplace.Api.Models.Validator;
 
 namespace Nextplace.Api.Controllers;
 
@@ -31,55 +33,105 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
 
             await context.SaveLogEntry("GetMinerStats", "Started", "Information", executionInstanceId);
 
-            var miners = context.Miner.Include(m => m.Scores).Where(m => m.Active);
 
-            var ranking = 0;
-            
-            var l = new List<MinerStats>();
 
-            foreach (var dbEntry in miners.OrderByDescending(m => m.Incentive))
+
+            const string cacheKey = "GetMinerStats";
+            List<MinerStats> minerStatsList;
+            if (cache.TryGetValue(cacheKey, out var cachedData))
             {
-                var scores = dbEntry.Scores!.Where(s => s.Active).ToList();
+                minerStatsList = (List<MinerStats>)cachedData!;
+                await context.SaveLogEntry("GetMinerStats", "Obtained from cache", "Information", executionInstanceId);
+            }
+            else
+            {
+                var miners = context.Miner.Include(m => m.Scores)!.ThenInclude(minerScore => minerScore.Validator).Where(m => m.Active);
 
-                double? minScore = null;
-                double? avgScore = null;
-                double? maxScore = null;
-                var numScores = 0;
-                var numPredictions = 0;
-                DateTime? scoreGenerationDate = null;
-                
-                if (scores.Any())
+                var ranking = 0;
+
+                minerStatsList = new List<MinerStats>();
+
+                foreach (var dbEntry in miners.OrderByDescending(m => m.Incentive))
                 {
-                    minScore = scores.Min(s => s.Score);
-                    avgScore = scores.Average(s => s.Score);
-                    maxScore = scores.Max(s => s.Score);
-                    numScores = scores.Select(s => s.ValidatorId).Distinct().Count();
-                    numPredictions = scores.Max(s => s.NumPredictions);
-                    scoreGenerationDate = scores.Max(s => s.ScoreGenerationDate);
+                    var scores = dbEntry.Scores!.Where(s => s.Active).ToList();
+
+                    double? minScore = null;
+                    double? avgScore = null;
+                    double? maxScore = null;
+                    var numScores = 0;
+                    var numPredictions = 0;
+                    var totalPredictions = 0;
+                    DateTime? scoreGenerationDate = null;
+
+                    List<MinerScore>? minerScores = null;
+                    if (scores.Any())
+                    {
+                        minScore = scores.Min(s => s.Score);
+                        avgScore = scores.Average(s => s.Score);
+                        maxScore = scores.Max(s => s.Score);
+                        numScores = scores.Select(s => s.ValidatorId).Distinct().Count();
+                        numPredictions = scores.Max(s => s.NumPredictions);
+                        totalPredictions = scores.Max(s => s.TotalPredictions);
+                        scoreGenerationDate = scores.Max(s => s.ScoreGenerationDate);
+
+                        minerScores = new List<MinerScore>();
+                        foreach (var score in scores)
+                        {
+                            Validator? validator = null;
+                            if (score.Validator != null)
+                            {
+                                validator = new Validator(score.Validator.HotKey, score.Validator.ColdKey);
+                            }
+
+                            minerScores.Add(new MinerScore(score.Score, score.NumPredictions, score.TotalPredictions, score.ScoreGenerationDate,
+                               validator));
+                        }
+                    }
+
+                    var miner = new Miner(
+                        dbEntry.HotKey,
+                        dbEntry.ColdKey,
+                        dbEntry.CreateDate,
+                        dbEntry.LastUpdateDate,
+                        dbEntry.Active,
+                        dbEntry.Incentive,
+                        dbEntry.Uid)
+                    {
+                        AvgScore = avgScore,
+                        MaxScore = maxScore,
+                        MinScore = minScore,
+                        NumPredictions = numPredictions,
+                        TotalPredictions = totalPredictions,
+                        NumScores = numScores,
+                        ScoreGenerationDate = scoreGenerationDate,
+                        MinerScores = minerScores
+                    };
+
+                    var minerStats = new MinerStats(miner, ++ranking);
+
+                    minerStatsList.Add(minerStats);
                 }
 
-                var miner = new Miner(
-                    dbEntry.HotKey,
-                    dbEntry.ColdKey,
-                    dbEntry.CreateDate,
-                    dbEntry.LastUpdateDate,
-                    dbEntry.Active,
-                    dbEntry.Incentive, 
-                    dbEntry.Uid)
-                {
-                    AvgScore = avgScore, MaxScore = maxScore, MinScore = minScore, NumPredictions = numPredictions,
-                    NumScores = numScores, ScoreGenerationDate = scoreGenerationDate
-                };
 
-                var minerStats = new MinerStats(miner, ++ranking);
-                
-                l.Add(minerStats);
+                await context.SaveLogEntry("GetMinerStats", "Obtained from DB", "Information", executionInstanceId);
+
+                cache.Set(cacheKey, minerStatsList, TimeSpan.FromHours(12));
             }
+
+
+
+
+
+
+            
+            
+            
+            
 
             Response.AppendCorsHeaders();
 
             await context.SaveLogEntry("GetMinerStats", "Completed", "Information", executionInstanceId);
-            return Ok(l);
+            return Ok(minerStatsList);
         }
         catch (Exception ex)
         {
@@ -137,7 +189,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                 var miner = await context.Miner.FirstOrDefaultAsync(m => m.HotKey == minerScore.MinerHotKey) ??
                             await AddMiner(minerScore.MinerHotKey, minerScore.MinerColdKey, executionInstanceId);
 
-                List<MinerScore> existingEntries;
+                List<Db.MinerScore> existingEntries;
                 if (matchingValidator == null)
                 {
                     existingEntries = await context.MinerScore.Where(p =>
@@ -158,11 +210,12 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                     deleted++;
                 }
 
-                var dbEntry = new MinerScore
+                var dbEntry = new Db.MinerScore
                 {
                     MinerId = miner.Id,
                     Score = minerScore.MinerScore, 
                     NumPredictions = minerScore.NumPredictions, 
+                    TotalPredictions = minerScore.TotalPredictions,
                     ScoreGenerationDate = minerScore.ScoreGenerationDate,
                     CreateDate = DateTime.UtcNow,
                     Active = true,
