@@ -26,7 +26,6 @@ public sealed class SyncPropertyEstimates(ILoggerFactory loggerFactory, IConfigu
             _apiKey = await new AkvHelper(configuration).GetSecretAsync("ZillowApiKey");
 
             var properties = context.Property
-                .Include(p => p.Estimates)
                 .Where(p => p.Active && !p.Estimates!.Any() && p.SaleDate != null && p.Address != null &&
                             p.City != null && p.State != null && p.ZipCode != null && !p.EstimatesCollected)
                 .ToList();

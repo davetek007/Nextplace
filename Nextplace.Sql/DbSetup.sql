@@ -147,3 +147,89 @@ CREATE INDEX IX_Property_Covering ON Property (Id, SaleDate, ListingDate, Active
 CREATE INDEX IX_PropertyPrediction_PredictionData ON PropertyPrediction (PropertyId, Active, PredictedSaleDate, PredictedSalePrice);
 CREATE INDEX IX_PropertyEstimate_PropertyId_Estimate ON PropertyEstimate (PropertyId, Estimate);
 go
+
+create procedure [dbo].[CalculatePropertyEstimateStats]
+as
+	select		*
+	into		#e
+	from		dbo.PropertyEstimate e
+	where		active = 0x1
+	and			propertyId not in (
+		select		propertyId
+		from		dbo.PropertyEstimateStats
+		where		createDate > dateadd (hh, -1, getutcdate())
+		and			active = 0x1)
+	and			propertyId in (
+		select		propertyId 
+		from (
+			select		propertyId, max (dateEstimated) as maxDateEstimated
+			from		dbo.PropertyEstimate
+			group by	propertyId
+			having		max (dateEstimated) > dateadd (dd, -3, getutcdate())) as a)
+
+	select		*
+	into		#p
+	from		dbo.Property
+	where		active = 0x1
+	and			id in (select propertyId from #e)
+
+	delete		e
+	from		#p p, #e e
+	where		p.id = e.propertyId
+	and			p.saleDate is not null
+	and			e.dateEstimated >= p.saleDate
+
+	select		e.propertyId, 
+				min (dateEstimated) as firstEstimateDate, max (dateEstimated) as lastEstimateDate,
+				count (1) as numEstimates, avg (estimate) as avgEstimate, min (estimate) as minEstimate, max (estimate) as maxEstimate,
+				cast (null as float) as firstEstimateAmount,
+				cast (null as float) as lastEstimateAmount,
+				cast (null as float) as closestEstimate
+	into		#s
+	from		#e e 
+	group by	e.propertyId
+		
+	update		s
+	set			s.closestEstimate = e.closestEstimate
+	from		#s s, (
+		select		min(e1.estimate) as closestEstimate, e1.propertyId
+		from		#e e1, (
+			select		e.propertyId, p.salePrice, min(abs (e.Estimate - p.salePrice)) as dist
+			from		#e e, #p p
+			where		e.propertyId = p.id 
+			group by	e.propertyId, p.salePrice) as e2
+		where		e1.propertyId = e2.propertyId
+		and			abs (e1.Estimate - e2.salePrice) = e2.dist
+		group by	e1.propertyId) e
+	where	s.propertyId = e.propertyId
+		
+	update		s
+	set			s.firstEstimateAmount = e.firstEstimateAmount
+	from		#s s, (
+		select		e1.estimate as firstEstimateAmount, e1.propertyId
+		from		#e e1, (
+			select		min (id) as firstEstimateId, propertyId
+			from		#e 
+			group by	propertyId) e2
+		where		e1.id = e2.firstEstimateId) as e
+	where		s.propertyId = e.propertyId
+			
+	update		s
+	set			s.lastEstimateAmount = e.lastEstimateAmount
+	from		#s s, (
+		select		e1.estimate as lastEstimateAmount, e1.propertyId
+		from		#e e1, (
+			select		max (id) as lastEstimateId, propertyId
+			from		#e 
+			group by	propertyId) e2
+		where		e1.id = e2.lastEstimateId) as e
+	where		s.propertyId = e.propertyId
+
+	delete	s
+	from	dbo.PropertyEstimateStats s
+	where	s.propertyId in (select propertyId from #s)
+
+	insert	dbo.PropertyEstimateStats (propertyId, firstEstimateDate, lastEstimateDate, firstEstimateAmount, lastEstimateAmount, numEstimates, minEstimate, maxEstimate, avgEstimate, closestEstimate, createDate, lastUpdateDate, active)
+	select	propertyId, firstEstimateDate, lastEstimateDate, firstEstimateAmount, lastEstimateAmount, numEstimates, minEstimate, maxEstimate, avgEstimate, isnull (closestEstimate, 0), getutcdate(), getutcdate(), 0x1
+	from	#s
+go
