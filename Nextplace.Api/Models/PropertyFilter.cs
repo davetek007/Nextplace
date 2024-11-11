@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace Nextplace.Api.Models;
+﻿namespace Nextplace.Api.Models;
 
 public class PropertyFilter
 {

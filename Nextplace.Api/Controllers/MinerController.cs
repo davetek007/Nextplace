@@ -19,7 +19,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
     [SwaggerOperation(
         "Get miner stats")]
     [HttpGet("Stats", Name = "Stats")]
-    public async Task<ActionResult<List<MinerStats>>> GetMinerStats()
+    public async Task<ActionResult<List<MinerStats>>> GetMinerStats([FromQuery] MinerStatsFilter filter)
     {
         var executionInstanceId = Guid.NewGuid().ToString();
 
@@ -32,11 +32,10 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
             }
 
             await context.SaveLogEntry("GetMinerStats", "Started", "Information", executionInstanceId);
+            await context.SaveLogEntry("GetMinerStats", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
 
+            var cacheKey = "GetMinerStats" + JsonConvert.SerializeObject(filter);
 
-
-
-            const string cacheKey = "GetMinerStats";
             List<MinerStats> minerStatsList;
             if (cache.TryGetValue(cacheKey, out var cachedData))
             {
@@ -53,6 +52,13 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
 
                 foreach (var dbEntry in miners.OrderByDescending(m => m.Incentive))
                 {
+                    if (filter is { MinerHotKey: not null })
+                    {
+                        if (!string.Equals(dbEntry.HotKey, filter.MinerHotKey))
+                        {
+                            continue;
+                        }
+                    }
                     var scores = dbEntry.Scores!.Where(s => s.Active).ToList();
 
                     double? minScore = null;
@@ -115,18 +121,8 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
 
                 await context.SaveLogEntry("GetMinerStats", "Obtained from DB", "Information", executionInstanceId);
 
-                cache.Set(cacheKey, minerStatsList, TimeSpan.FromHours(12));
+                cache.Set(cacheKey, minerStatsList, TimeSpan.FromHours(1));
             }
-
-
-
-
-
-
-            
-            
-            
-            
 
             Response.AppendCorsHeaders();
 
