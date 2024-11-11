@@ -148,8 +148,11 @@ CREATE INDEX IX_PropertyPrediction_PredictionData ON PropertyPrediction (Propert
 CREATE INDEX IX_PropertyEstimate_PropertyId_Estimate ON PropertyEstimate (PropertyId, Estimate);
 go
 
-create procedure [dbo].[CalculatePropertyEstimateStats]
+create procedure [dbo].[CalculatePropertyEstimateStats] (@executionInstanceId nvarchar(450))
 as
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
+
 	select		*
 	into		#e
 	from		dbo.PropertyEstimate e
@@ -166,18 +169,31 @@ as
 			from		dbo.PropertyEstimate
 			group by	propertyId
 			having		max (dateEstimated) > dateadd (dd, -3, getutcdate())) as a)
+			
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Estimated selected', 'Information', getutcdate(), @executionInstanceId)
 
 	select		*
 	into		#p
 	from		dbo.Property
 	where		active = 0x1
 	and			id in (select propertyId from #e)
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Properties selected', 'Information', getutcdate(), @executionInstanceId)
 
 	delete		e
 	from		#p p, #e e
 	where		p.id = e.propertyId
 	and			p.saleDate is not null
-	and			e.dateEstimated >= p.saleDate
+	and			e.dateEstimated >= p.saleDate	
+
+	delete		p
+	from		#p p 
+	where		p.id not in (select propertyId from #e)
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Estimates beyond sale date removed', 'Information', getutcdate(), @executionInstanceId)
 
 	select		e.propertyId, 
 				min (dateEstimated) as firstEstimateDate, max (dateEstimated) as lastEstimateDate,
@@ -188,7 +204,10 @@ as
 	into		#s
 	from		#e e 
 	group by	e.propertyId
-		
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Stats calculated', 'Information', getutcdate(), @executionInstanceId)
+
 	update		s
 	set			s.closestEstimate = e.closestEstimate
 	from		#s s, (
@@ -202,7 +221,7 @@ as
 		and			abs (e1.Estimate - e2.salePrice) = e2.dist
 		group by	e1.propertyId) e
 	where	s.propertyId = e.propertyId
-		
+
 	update		s
 	set			s.firstEstimateAmount = e.firstEstimateAmount
 	from		#s s, (
@@ -213,7 +232,7 @@ as
 			group by	propertyId) e2
 		where		e1.id = e2.firstEstimateId) as e
 	where		s.propertyId = e.propertyId
-			
+
 	update		s
 	set			s.lastEstimateAmount = e.lastEstimateAmount
 	from		#s s, (
@@ -224,12 +243,23 @@ as
 			group by	propertyId) e2
 		where		e1.id = e2.lastEstimateId) as e
 	where		s.propertyId = e.propertyId
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Closest, first and last stats calculated', 'Information', getutcdate(), @executionInstanceId)
 
 	delete	s
 	from	dbo.PropertyEstimateStats s
 	where	s.propertyId in (select propertyId from #s)
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Old entries deleted', 'Information', getutcdate(), @executionInstanceId)
 
 	insert	dbo.PropertyEstimateStats (propertyId, firstEstimateDate, lastEstimateDate, firstEstimateAmount, lastEstimateAmount, numEstimates, minEstimate, maxEstimate, avgEstimate, closestEstimate, createDate, lastUpdateDate, active)
 	select	propertyId, firstEstimateDate, lastEstimateDate, firstEstimateAmount, lastEstimateAmount, numEstimates, minEstimate, maxEstimate, avgEstimate, isnull (closestEstimate, 0), getutcdate(), getutcdate(), 0x1
 	from	#s
-go
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'New entries added', 'Information', getutcdate(), @executionInstanceId)
+
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyEstimateStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)

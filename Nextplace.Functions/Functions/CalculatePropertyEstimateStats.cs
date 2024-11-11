@@ -26,6 +26,8 @@ public sealed class CalculatePropertyEstimateStats(ILoggerFactory loggerFactory,
             
             command.CommandType = CommandType.StoredProcedure;
             command.CommandTimeout = 600;
+            
+            command.Parameters.Add(new SqlParameter("@executionInstanceId", executionInstanceId));
 
             await connection?.OpenAsync()!;
             await command.ExecuteNonQueryAsync();
