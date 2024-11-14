@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Datasync.EFCore;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.OData.Edm;
 
 namespace Nextplace.Api.Db;
 
@@ -17,7 +18,12 @@ public sealed class Validator : EntityTableData
     public required string HotKey { get; init; }
 
     [MaxLength(450)]
+    public string? AppVersion { get; set; }
+
+    [MaxLength(450)]
     public required string ColdKey { get; init; }
+
+    public required DateTime LastUpdateDate { get; set; }
 
     public bool Active { get; set; }
 

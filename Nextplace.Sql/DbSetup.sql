@@ -62,6 +62,7 @@ create table dbo.Validator (
 	coldKey nvarchar(100) not null,
 	incentive float(53) not null,
 	ipAddress nvarchar(450) not null,
+	appVersion nvarchar(450) null,
 	createDate datetime2 not null,
 	lastUpdateDate datetime2 not null,
 	active bit not null)
