@@ -42,14 +42,6 @@ public class ValidatorController(AppDbContext context, IConfiguration configurat
 
                 return StatusCode(403);
             }
-            
-            if (matchingValidator.HotKey != request.HotKey)
-            {
-                await context.SaveLogEntry("PostValidatorInfo", "Hotkey does not match", "Warning", executionInstanceId);
-                await context.SaveLogEntry("PostValidatorInfo", "Completed", "Information", executionInstanceId);
-
-                return StatusCode(403);
-            }
 
             await context.SaveLogEntry("PostValidatorInfo", $"IP address returned for validator {matchingValidator.HotKey} (ID: {matchingValidator.Id})", "Information", executionInstanceId);
 
@@ -67,6 +59,37 @@ public class ValidatorController(AppDbContext context, IConfiguration configurat
         catch (Exception ex)
         {
             await context.SaveLogEntry("PostValidatorInfo", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+    
+    [HttpGet("Info", Name = "GetValidatorInfo")]
+    public async Task<ActionResult> GetValidatorInfo()
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!HttpContext.CheckRateLimit(cache, configuration, "GetValidatorInfo", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetValidatorInfo", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("GetValidatorInfo", "Started", "Information", executionInstanceId);
+
+         
+            var validators = await context.Validator.Where(w => w.Active == true).ToListAsync();
+
+            var l = validators.Select(validator => new Models.Validator(validator.HotKey, validator.ColdKey)
+                { Version = validator.AppVersion }).ToList();
+
+            await context.SaveLogEntry("GetValidatorInfo", "Completed", "Information", executionInstanceId);
+            return Ok(l);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("GetValidatorInfo", ex, executionInstanceId);
             return StatusCode(500);
         }
     }
