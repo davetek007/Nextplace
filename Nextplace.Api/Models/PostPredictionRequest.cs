@@ -2,7 +2,7 @@
 
 namespace Nextplace.Api.Models;
 
-public class PostPredictionRequest(string nextplaceId, string minerHotKey, string minerColdKey, float? predictionScore, DateTime predictionDate, float predictedSalePrice, DateTime predictedSaleDate)
+public class PostPredictionRequest(string nextplaceId, string minerHotKey, string minerColdKey, float? predictionScore, DateTime predictionDate, float predictedSalePrice, DateTime? predictedSaleDate)
 {
     [Required]
     public string NextplaceId { get; } = nextplaceId;
@@ -21,6 +21,5 @@ public class PostPredictionRequest(string nextplaceId, string minerHotKey, strin
     [Required]
     public float PredictedSalePrice { get; } = predictedSalePrice;
 
-    [Required]
-    public DateTime PredictedSaleDate { get; } = predictedSaleDate;
+    public DateTime? PredictedSaleDate { get; } = predictedSaleDate;
 }

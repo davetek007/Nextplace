@@ -9,6 +9,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<Market> Market => Set<Market>();
 
+    public DbSet<PropertyValuation> PropertyValuation => Set<PropertyValuation>();
+
+    public DbSet<PropertyValuationPrediction> PropertyValuationPrediction => Set<PropertyValuationPrediction>();
+
     public DbSet<Property> Property => Set<Property>();
 
     public DbSet<PropertyEstimate> PropertyEstimate => Set<PropertyEstimate>();
@@ -26,6 +30,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         
         modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
             .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+         
+        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.ValuationPredictions)
+            .HasForeignKey(tgp => tgp.MinerId);
+
+        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.ValuationPredictions)
+            .HasForeignKey(tgp => tgp.ValidatorId);
+
+        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.PropertyValuation).WithMany(m => m.Predictions)
+            .HasForeignKey(tgp => tgp.PropertyValuationId); base.OnModelCreating(modelBuilder);
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

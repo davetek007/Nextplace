@@ -8,7 +8,8 @@
     "SyncMinerStatusTimerSchedule": "0 0 * * * *",
     "SyncValidatorStatusTimerSchedule": "0 0 * * * *",
     "SyncPropertyEstimatesTimerSchedule": "0 0 * * * *",
-    "CalculatePropertyEstimateStatsTimerSchedule": "* * * * * *",
+    "CalculatePropertyEstimateStatsTimerSchedule": "0 0 * * * *",
+    "CalculatePropertyValuationsTimerSchedule": "* * * * * *",
     "RetryCount": 6
   }
 }

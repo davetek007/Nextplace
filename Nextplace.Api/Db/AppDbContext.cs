@@ -9,6 +9,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<Property> Property => Set<Property>();
 
+    public DbSet<PropertyValuation> PropertyValuation => Set<PropertyValuation>();
+
+    public DbSet<PropertyValuationPrediction> PropertyValuationPrediction => Set<PropertyValuationPrediction>();
+
     public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
 
     public DbSet<ApiLog> ApiLog => Set<ApiLog>();
@@ -38,6 +42,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Validator).WithMany(m => m.MinerScores)
             .HasForeignKey(tgp => tgp.ValidatorId);
+
+        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.ValuationPredictions)
+            .HasForeignKey(tgp => tgp.MinerId);
+
+        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.ValuationPredictions)
+            .HasForeignKey(tgp => tgp.ValidatorId);
+
+        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.PropertyValuation).WithMany(m => m.Predictions)
+            .HasForeignKey(tgp => tgp.PropertyValuationId); base.OnModelCreating(modelBuilder);
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

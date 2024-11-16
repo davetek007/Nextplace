@@ -8,6 +8,7 @@ using PropertyPrediction = Nextplace.Api.Models.PropertyPrediction;
 using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
 using Microsoft.Extensions.Caching.Memory;
+using PropertyValuation = Nextplace.Api.Db.PropertyValuation;
 
 namespace Nextplace.Api.Controllers;
 
@@ -186,6 +187,118 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         catch (Exception ex)
         {
             await context.SaveLogEntry("GetCurrentProperties", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+
+    [HttpGet("Valuations", Name = "GetPropertyValuations")]
+    [SwaggerOperation("Get property valuation requests")]
+    public async Task<ActionResult<List<Models.PropertyValuation>>> GetPropertyValuations()
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!HttpContext.CheckRateLimit(cache, config, "GetPropertyValuations", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("GetPropertyValuations", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("GetPropertyValuations", "Started", "Information", executionInstanceId);
+
+            var results = await context.PropertyValuation.Where(p => p.RequestStatus == "New" && p.Active).ToListAsync();
+ 
+            Response.Headers.Append("Nextplace-Search-Total-Count", results.Count.ToString());
+
+            Response.AppendCorsHeaders();
+
+            await context.SaveLogEntry("GetPropertyValuations", $"{results.Count} properties valuations found", "Information", executionInstanceId);
+
+            var propertyValuations = new List<Models.PropertyValuation>();
+            foreach (var data in results)
+            {
+                var propertyValuation = new Models.PropertyValuation(
+                    data.Id,
+                    data.NextplaceId,
+                    data.Longitude,
+                    data.Latitude,
+                    data.City,
+                    data.State,
+                    data.ZipCode,
+                    data.Address,
+                    data.NumberOfBeds,
+                    data.NumberOfBaths,
+                    data.SquareFeet,
+                    data.LotSize,
+                    data.YearBuilt,
+                    data.HoaDues,
+                    data.CreateDate,
+                    data.LastUpdateDate,
+                    data.Active);
+                
+                propertyValuations.Add(propertyValuation);
+            }
+
+            await context.SaveLogEntry("GetPropertyValuations", "Completed", "Information", executionInstanceId);
+            return Ok(propertyValuations);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("GetPropertyValuations", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+
+    [HttpPost("Valuation", Name = "PostPropertyValuation")]
+    [SwaggerOperation("Post a property valuation request")]
+    public async Task<ActionResult> PostPropertyValuation(PostPropertyValuationRequest request)
+    {
+        var executionInstanceId = Guid.NewGuid().ToString(); 
+
+        try
+        {
+            if (!HttpContext.CheckRateLimit(cache, config, "PostPropertyValuation", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("PostPropertyValuation", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("PostPropertyValuation", "Started", "Information", executionInstanceId);
+            await context.SaveLogEntry("PostPropertyValuation", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+
+            var dbEntry = new PropertyValuation
+            { 
+                RequestStatus = "New", 
+                NextplaceId = $"PVR-{Guid.NewGuid()}",
+                Active = true, 
+                Address = request.Address, 
+                City = request.City,
+                CreateDate = DateTime.UtcNow,
+                LastUpdateDate = DateTime.UtcNow,
+                Latitude = request.Latitude,
+                Longitude = request.Longitude,
+                NumberOfBaths = request.NumberOfBaths,
+                NumberOfBeds = request.NumberOfBeds,
+                State = request.State,
+                ZipCode = request.ZipCode,
+                YearBuilt = request.YearBuilt,
+                HoaDues = request.HoaDues,
+                RequestorEmailAddress = request.RequestorEmailAddress
+            };
+
+            context.PropertyValuation.Add(dbEntry);
+
+            await context.SaveChangesAsync(); 
+
+            await context.SaveLogEntry("PostPropertyValuation", $"Saving property valuation {dbEntry.NextplaceId} to DB", "Information", executionInstanceId);
+            await context.SaveLogEntry("PostPropertyValuation", "Completed", "Information", executionInstanceId);
+            
+            return CreatedAtAction(nameof(PostPropertyValuation), new { id = dbEntry.NextplaceId }, dbEntry);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
             return StatusCode(500);
         }
     }

@@ -26,4 +26,7 @@ public sealed class Validator : EntityTableData
     public required DateTime LastUpdateDate { get; set; }
 
     public required bool Active { get; set; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<PropertyValuationPrediction>? ValuationPredictions { get; init; }
 }

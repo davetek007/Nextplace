@@ -31,5 +31,8 @@ public sealed class Validator : EntityTableData
     public ICollection<PropertyPrediction>? Predictions { get; init; }
 
     // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<PropertyValuationPrediction>? ValuationPredictions { get; init; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<MinerScore>? MinerScores { get; init; }
 }

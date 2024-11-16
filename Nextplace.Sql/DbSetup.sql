@@ -7,6 +7,28 @@ create table dbo.Market (
 	[active] [bit] NOT NULL)
 go
 
+create table dbo.PropertyValuation (
+	id bigint identity (1,1) primary key not null,
+	[nextplaceId] [nvarchar](450) NOT NULL,
+	[longitude] [float] NOT NULL,
+	[latitude] [float] NOT NULL,
+	[city] [nvarchar](450) NULL,
+	[state] [nvarchar](450) NULL,
+	[zipCode] [nvarchar](450) NULL,
+	[address] [nvarchar](450) NULL,
+	[numberOfBeds] [int] NULL,
+	[numberOfBaths] [float] NULL,
+	[squareFeet] [int] NULL,
+	[lotSize] bigint  NULL,
+	[yearBuilt] [int] NULL,
+	[hoaDues] [int] NULL,
+	requestorEmailAddress [nvarchar](450) NULL,
+	requestStatus [nvarchar](450) NULL,
+	[createDate] [datetime2](7) NOT NULL,
+	[lastUpdateDate] [datetime2](7) NOT NULL,
+	[active] [bit] NOT NULL)
+go
+
 create table dbo.Property (
 	id bigint identity (1,1) primary key not null,
 	[propertyId] bigint NOT NULL,
@@ -94,10 +116,24 @@ go
 
 create table dbo.PropertyPrediction (
 	id bigint identity (1,1) primary key not null,
+	propertyId bigint foreign key references dbo.Property (id) not null, 
 	minerId bigint foreign key references dbo.Miner (id) not null, 
 	validatorId bigint foreign key references dbo.Validator (id),
 	predictionDate datetime2 not null,
 	predictedSaleDate datetime2 not null,
+	predictedSalePrice float(53) not null,
+	predictionScore float(53) null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go  
+
+create table dbo.PropertyValuationPrediction (
+	id bigint identity (1,1) primary key not null,
+	propertyValuationId bigint foreign key references dbo.PropertyValuation (id) not null, 
+	minerId bigint foreign key references dbo.Miner (id) not null, 
+	validatorId bigint foreign key references dbo.Validator (id),
+	predictionDate datetime2 not null,
 	predictedSalePrice float(53) not null,
 	predictionScore float(53) null,
 	createDate datetime2 not null,

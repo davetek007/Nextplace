@@ -56,10 +56,13 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             }
             
             var propertyMissing = 0;
-            var badPredictedOutcome = 0;
+            var propertyValuationMissing = 0;
+            var activePropertyValuationPredictions = 0;
             var activePredictions = 0;
             var deleted = 0;
             var inserted = 0;
+            var insertedPropertyValuations = 0;
+            var predictedSaleDateMissing = 0;
 
             if (request.Count > predictionLimit)
             {
@@ -70,67 +73,131 @@ public class PredictionController(AppDbContext context, IConfiguration configura
 
             foreach (var prediction in request)
             {
-                var property =
-                    await context.Property.Where(p=>p.NextplaceId == prediction.NextplaceId).OrderByDescending(p=>p.ListingDate).FirstOrDefaultAsync();
-
-                if (property == null)
+                if (prediction.NextplaceId.StartsWith("PVR-"))
                 {
-                    propertyMissing++;
-                    continue;
+                    var propertyValuation =
+                        await context.PropertyValuation.Where(p => p.NextplaceId == prediction.NextplaceId)
+                            .FirstOrDefaultAsync();
+
+                    if (propertyValuation == null)
+                    {
+                        propertyValuationMissing++;
+                        continue;
+                    }
+
+                    var miner = await context.Miner.FirstOrDefaultAsync(m => m.HotKey == prediction.MinerHotKey) ??
+                                await AddMiner(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
+
+                    var hasActivePredictions = await context.PropertyValuationPrediction.Where(p =>
+                        p.MinerId == miner.Id && p.PropertyValuationId == propertyValuation.Id && p.Active).AnyAsync(existingEntry =>
+                        existingEntry.PredictionDate >= prediction.PredictionDate);
+
+                    if (hasActivePredictions)
+                    {
+                        activePropertyValuationPredictions++;
+                        continue;
+                    }
+                    var dbEntry = new PropertyValuationPrediction
+                    {
+                        MinerId = miner.Id,
+                        PredictedSalePrice = prediction.PredictedSalePrice,
+                        PredictionDate = prediction.PredictionDate,
+                        PropertyValuationId = propertyValuation.Id,
+                        CreateDate = DateTime.UtcNow,
+                        Active = true,
+                        LastUpdateDate = DateTime.UtcNow
+                    };
+
+                    if (prediction.PredictionScore.HasValue)
+                    {
+                        dbEntry.PredictionScore = prediction.PredictionScore.Value;
+                    }
+
+                    if (matchingValidator != null)
+                    {
+                        dbEntry.ValidatorId = matchingValidator.Id;
+                    }
+
+                    insertedPropertyValuations++;
+
+                    context.PropertyValuationPrediction.Add(dbEntry);
+                    await context.SaveChangesAsync();
                 }
-
-                var miner = await context.Miner.FirstOrDefaultAsync(m => m.HotKey == prediction.MinerHotKey) ??
-                            await AddMiner(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
-                 
-                var hasActivePredictions = await context.PropertyPrediction.Where(p =>
-                    p.MinerId == miner.Id && p.PropertyId == property.Id && p.Active).AnyAsync(existingEntry =>
-                    existingEntry.PredictionDate >= prediction.PredictionDate);
-
-                if (hasActivePredictions)
+                else
                 {
-                    activePredictions++;
-                    continue;
+                    var property =
+                        await context.Property.Where(p => p.NextplaceId == prediction.NextplaceId)
+                            .OrderByDescending(p => p.ListingDate).FirstOrDefaultAsync();
+
+                    if (property == null)
+                    {
+                        propertyMissing++;
+                        continue;
+                    }
+
+                    if (!prediction.PredictedSaleDate.HasValue)
+                    {
+                        predictedSaleDateMissing++;
+                        continue;
+                    }
+
+                    var miner = await context.Miner.FirstOrDefaultAsync(m => m.HotKey == prediction.MinerHotKey) ??
+                                await AddMiner(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
+
+                    var hasActivePredictions = await context.PropertyPrediction.Where(p =>
+                        p.MinerId == miner.Id && p.PropertyId == property.Id && p.Active).AnyAsync(existingEntry =>
+                        existingEntry.PredictionDate >= prediction.PredictionDate);
+
+                    if (hasActivePredictions)
+                    {
+                        activePredictions++;
+                        continue;
+                    }
+
+                    var existingEntries = await context.PropertyPrediction.Where(p =>
+                        p.MinerId == miner.Id && p.PropertyId == property.Id && p.Active).ToListAsync();
+
+                    foreach (var existingEntry in existingEntries)
+                    {
+                        existingEntry.Active = false;
+                        existingEntry.LastUpdateDate = DateTime.UtcNow;
+                        deleted++;
+                    }
+
+                    var dbEntry = new PropertyPrediction
+                    {
+                        MinerId = miner.Id,
+                        PredictedSaleDate = prediction.PredictedSaleDate!.Value,
+                        PredictedSalePrice = prediction.PredictedSalePrice,
+                        PredictionDate = prediction.PredictionDate,
+                        PropertyId = property.Id,
+                        CreateDate = DateTime.UtcNow,
+                        Active = true,
+                        LastUpdateDate = DateTime.UtcNow
+                    };
+
+                    if (prediction.PredictionScore.HasValue)
+                    {
+                        dbEntry.PredictionScore = prediction.PredictionScore.Value;
+                    }
+
+                    if (matchingValidator != null)
+                    {
+                        dbEntry.ValidatorId = matchingValidator.Id;
+                    }
+
+                    inserted++;
+
+                    context.PropertyPrediction.Add(dbEntry);
+                    await context.SaveChangesAsync();
                 }
-
-                var existingEntries = await context.PropertyPrediction.Where(p =>
-                    p.MinerId == miner.Id && p.PropertyId == property.Id && p.Active).ToListAsync();
-
-                foreach (var existingEntry in existingEntries)
-                {
-                    existingEntry.Active = false;
-                    existingEntry.LastUpdateDate = DateTime.UtcNow;
-                    deleted++;
-                }
-
-                var dbEntry = new PropertyPrediction
-                {
-                    MinerId = miner.Id,
-                    PredictedSaleDate = prediction.PredictedSaleDate,
-                    PredictedSalePrice = prediction.PredictedSalePrice,
-                    PredictionDate = prediction.PredictionDate,
-                    PropertyId = property.Id,
-                    CreateDate = DateTime.UtcNow,
-                    Active = true,
-                    LastUpdateDate = DateTime.UtcNow
-                };
-                
-                if (prediction.PredictionScore.HasValue)
-                {
-                    dbEntry.PredictionScore = prediction.PredictionScore.Value;
-                }
-
-                if (matchingValidator != null)
-                {
-                    dbEntry.ValidatorId = matchingValidator.Id;
-                }
-                
-                inserted++;
-
-                context.PropertyPrediction.Add(dbEntry);
-                await context.SaveChangesAsync();
             }
 
-            await context.SaveLogEntry("PostPredictions", $"Inserted {inserted}, Deleted {deleted}, Properties missing {propertyMissing}, Active predictions {activePredictions}, Bad predicted outcome {badPredictedOutcome}", "Information", executionInstanceId);
+            await context.SaveLogEntry("PostPredictions", 
+                $"Properties: Inserted {inserted}, Deleted {deleted}, Properties missing {propertyMissing}, Active predictions {activePredictions}, Predicted Sale Date missing {predictedSaleDateMissing}", "Information", executionInstanceId);
+            
+            await context.SaveLogEntry("PostPredictions",
+                $"Property Valuations: Inserted {insertedPropertyValuations}, Property valuations missing {propertyValuationMissing}, Active predictions {activePropertyValuationPredictions}", "Information", executionInstanceId);
 
             await context.SaveLogEntry("PostPredictions", "Saving to DB", "Information", executionInstanceId);
             await context.SaveChangesAsync();

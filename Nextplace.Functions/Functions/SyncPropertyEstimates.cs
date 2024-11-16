@@ -3,7 +3,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Nextplace.Functions.Db;
 using Nextplace.Functions.Helpers;
-using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Nextplace.Functions.Models.SyncPropertyEstimates;
 
