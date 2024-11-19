@@ -2,7 +2,7 @@
 
 namespace Nextplace.Api.Models;
 
-public class PostValidatorInfoRequest(string hotKey, string version)
+public class PostValidatorInfoRequest(string version)
 {
     [Required]
     public string Version { get; } = version;
