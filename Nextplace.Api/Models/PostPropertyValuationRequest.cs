@@ -15,7 +15,9 @@ public class PostPropertyValuationRequest(
     int? squareFeet,
     long? lotSize,
     int? yearBuilt,
-    int? hoaDues)
+    int? hoaDues,
+    int propertyType, 
+    double proposedListingPrice)
 {
     [Required]
     public string RequestorEmailAddress { get; } = requestorEmailAddress;
@@ -45,4 +47,8 @@ public class PostPropertyValuationRequest(
     public int? YearBuilt { get; } = yearBuilt;
 
     public int? HoaDues { get; } = hoaDues;
+
+    public int PropertyType { get; } = propertyType;
+
+    public double ProposedListingPrice { get; } = proposedListingPrice;
 }

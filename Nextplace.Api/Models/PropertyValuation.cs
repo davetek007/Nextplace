@@ -17,6 +17,8 @@ public class PropertyValuation(
     long? lotSize,
     int? yearBuilt,
     int? hoaDues,
+    int propertyType,
+    double proposedListingPrice,
     DateTime createDate,
     DateTime lastUpdateDate,
     bool active)
@@ -33,6 +35,11 @@ public class PropertyValuation(
 
     [Required]
     public double Latitude { get; set; } = latitude;
+    [Required]
+    public int PropertyType { get; } = propertyType;
+
+    [Required]
+    public double ProposedListingPrice { get; set; } = proposedListingPrice;
 
     public string? City { get; } = city;
 

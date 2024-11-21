@@ -36,6 +36,10 @@ public sealed class PropertyValuation : EntityTableData
 
     public int? HoaDues { get; init; }
 
+    public required int PropertyType { get; init; }
+
+    public required double ProposedListingPrice { get; init; }
+
     [MaxLength(450)] public required string RequestorEmailAddress { get; init; }
 
     [MaxLength(450)] public required string RequestStatus { get; init; }

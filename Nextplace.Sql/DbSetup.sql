@@ -22,6 +22,8 @@ create table dbo.PropertyValuation (
 	[lotSize] bigint  NULL,
 	[yearBuilt] [int] NULL,
 	[hoaDues] [int] NULL,
+	propertyType int not null,
+	proposedListingPrice [float] not null,
 	requestorEmailAddress [nvarchar](450) NULL,
 	requestStatus [nvarchar](450) NULL,
 	[createDate] [datetime2](7) NOT NULL,

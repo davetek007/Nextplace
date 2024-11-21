@@ -9,6 +9,7 @@ using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
 using Microsoft.Extensions.Caching.Memory;
 using PropertyValuation = Nextplace.Api.Db.PropertyValuation;
+using Microsoft.Graph.Models.ExternalConnectors;
 
 namespace Nextplace.Api.Controllers;
 
@@ -233,6 +234,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                     data.LotSize,
                     data.YearBuilt,
                     data.HoaDues,
+                    data.PropertyType, 
+                    data.ProposedListingPrice,
                     data.CreateDate,
                     data.LastUpdateDate,
                     data.Active);
@@ -284,7 +287,9 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                 ZipCode = request.ZipCode,
                 YearBuilt = request.YearBuilt,
                 HoaDues = request.HoaDues,
-                RequestorEmailAddress = request.RequestorEmailAddress
+                RequestorEmailAddress = request.RequestorEmailAddress, 
+                PropertyType = request.PropertyType,
+                ProposedListingPrice = request.ProposedListingPrice
             };
 
             context.PropertyValuation.Add(dbEntry);
@@ -299,6 +304,101 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         catch (Exception ex)
         {
             await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+
+    [HttpGet("SalesTimeSeries", Name = "SalesTimeSeries")]
+    [SwaggerOperation("Get sales time series")]
+    public async Task<ActionResult<List<Property>>> SalesTimeSeries([FromQuery] DateTime startDate, [FromQuery] DateTime endDate, [FromQuery] int minimumPredictionCount)
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!HttpContext.CheckRateLimit(cache, config, "SalesTimeSeries", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("SalesTimeSeries", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("SalesTimeSeries", "Started", "Information", executionInstanceId);
+            
+            object data;
+            var cacheKey = $"SalesTimeSeries{startDate:s}{endDate:s}{minimumPredictionCount}";
+            
+            if (cache.TryGetValue(cacheKey, out var cachedData))
+            {
+                data = cachedData!;
+                await context.SaveLogEntry("SalesTimeSeries", "Obtained from cache", "Information", executionInstanceId);
+            }
+            else
+            {
+                data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
+                        && p.Predictions!.Count >=
+                        minimumPredictionCount)
+                    .GroupBy(p => p.SaleDate!.Value.Date)
+                    .Select(g => new { SaleDate = g.Key, Count = g.Count() }).ToListAsync();
+
+                cache.Set(cacheKey, data, TimeSpan.FromHours(12));
+            }
+
+            Response.AppendCorsHeaders();
+
+            await context.SaveLogEntry("SalesTimeSeries", "Completed", "Information", executionInstanceId);
+            return Ok(data);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("SalesTimeSeries", ex, executionInstanceId);
+            return StatusCode(500);
+        }
+    }
+
+    [HttpGet("MarketPerformance", Name = "MarketPerformance")]
+    [SwaggerOperation("Get market performance")]
+    public async Task<ActionResult<List<Property>>> MarketPerformance([FromQuery] DateTime startDate, [FromQuery] DateTime endDate, [FromQuery] int minimumPredictionCount)
+    {
+        var executionInstanceId = Guid.NewGuid().ToString();
+
+        try
+        {
+            if (!HttpContext.CheckRateLimit(cache, config, "MarketPerformance", out var offendingIpAddress))
+            {
+                await context.SaveLogEntry("MarketPerformance", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+                return StatusCode(429);
+            }
+
+            await context.SaveLogEntry("MarketPerformance", "Started", "Information", executionInstanceId);
+
+
+            object data;
+            var cacheKey = $"MarketPerformance{startDate:s}{endDate:s}{minimumPredictionCount}";
+
+            if (cache.TryGetValue(cacheKey, out var cachedData))
+            {
+                data = cachedData!;
+                await context.SaveLogEntry("MarketPerformance", "Obtained from cache", "Information", executionInstanceId);
+            }
+            else
+            {
+                data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
+                        && p.Predictions!.Count >=
+                        minimumPredictionCount)
+                    .GroupBy(p => p.Market)
+                    .Select(g => new { Market = g.Key, Count = g.Count() }).ToListAsync();
+
+                cache.Set(cacheKey, data, TimeSpan.FromHours(12));
+            }
+            Response.AppendCorsHeaders();
+
+
+            await context.SaveLogEntry("MarketPerformance", "Completed", "Information", executionInstanceId);
+            return Ok(data);
+        }
+        catch (Exception ex)
+        {
+            await context.SaveLogEntry("MarketPerformance", ex, executionInstanceId);
             return StatusCode(500);
         }
     }
