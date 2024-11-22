@@ -37,6 +37,11 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                 var predictions = propertyValuation.Predictions!
                     .Where(p => p.Active && p.CreateDate < DateTime.UtcNow.AddMinutes(-2))
                     .ToList();
+                
+                if(predictions.Count == 0)
+                {
+                    continue;
+                }
 
                 var topMinerPredictions = predictions
                     .OrderByDescending(p => p.Miner.Incentive)
