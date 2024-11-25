@@ -10,7 +10,11 @@ public class EmailContent
 	<title>Nextplace</title>
 	<meta http-equiv=""X-UA-Compatible"" content=""IE=edge"">
 	<meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"">
-	<meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+	<meta name=""viewport"" content=""width=device-width, initial-scale=1.0""> 
+	<link href=""https://fonts.googleapis.com/css2?family=Montserrat:wght@100;300;400;500;600;700;800;900&display=swap"" rel=""stylesheet"">
+    <link href=""https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&display=swap"" rel=""stylesheet"">
+    <link href=""https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap"" rel=""stylesheet"">
+    
 	<style type=""text/css"">
 		#outlook a {
 			padding: 0;
@@ -119,7 +123,7 @@ public class EmailContent
 										<tr>
 											<td style=""word-wrap:break-word;font-size:0px;padding:0px 0px 0px 0px;padding-top:10px;padding-bottom:0px;padding-right:25px;padding-left:25px;"" align=""left"">
 												<div style=""cursor:auto;color:#5E6977;font-family:Arial, sans-serif;font-size:13px;line-height:18px;text-align:left;"">
-													<style></style><h1 style=""font-size:26px""><span style=""font-family:Times New Roman;""><span style=""color:black"">[Title]</span></span></h1>
+													<style></style><h1 style=""""><span style=""font-family:Playfair Display,Times New Roman;font-weight:300;font-size:48px""><span style=""color:black"">[Title]</span></span></h1>
 												</div>
 											</td>
 										</tr>
@@ -133,22 +137,26 @@ public class EmailContent
                                             <td style=""word-wrap:break-word;font-size:0px;padding:0px 25px;"" align=""left"">
                                                 <div style=""cursor:auto;color:#5E6977;font-family:Arial, sans-serif;font-size:13px;line-height:22px;text-align:left;"">                                                   
                                                     
-                                                    <h2 style=""font-family:Times New Roman;font-size:22px; margin-top:20px;color:black"">Valuation Details</h2>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Min Value: [Min]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Max Value: [Max]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Average Value: [Avg]</p>         
+                                                    <h2 style=""font-family:Rajdhani,sans-serif;;font-size:32px;font-weight:400; margin-top:30px;color:black"">Valuation Details</h2>
+													<p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:18.4px"">You valued your property at [PredictedValue]. Our miners valued it as follows.</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:30px"">Min Value: [Min]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Max Value: [Max]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Average Value: [Avg]</p>         
 													
-													<h2 style=""font-family:Times New Roman;font-size:22px;color:black;margin-top:30px"">Property Information</h2>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">City: [city]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">State: [state]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Zip Code: [zipCode]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Address: [address]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Number of Beds: [numberOfBeds]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Number of Baths: [numberOfBaths]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Square Feet: [squareFeet]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Lot Size: [lotSize]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">Year Built: [yearBuilt]</p>
-                                                    <p style=""font-family:Times New Roman;color:black;font-size:16px"">HOA Dues: [hoaDues]</p>                                           
+													<p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:18.4px;margin-top:30px"">Based on this, you [UnderOver] your property.</p>
+                                                    
+													
+													<h2 style=""font-family:Rajdhani,sans-serif;;font-size:32px;font-weight:400; margin-top:60px;color:black"">Property Details</h2>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Address: [address]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">City: [city]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">State: [state]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Zip Code: [zipCode]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:40px"">Number of Beds: [numberOfBeds]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Number of Baths: [numberOfBaths]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Square Feet: [squareFeet]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Lot Size: [lotSize]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Year Built: [yearBuilt]</p>
+                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">HOA Dues: [hoaDues]</p>                                           
                                                 </div>
                                             </td>
                                         </tr>
@@ -158,7 +166,10 @@ public class EmailContent
 													<br />
 													
 													<br /><br /><br />
-													</span></span></span></p><p style=""margin: 10px 0;""><span style=""font-family:Times New Roman;""><span style=""color:black;""><span style=""font-size:15px;"">Thanks, the Nextplace Team</span></span></span></p>
+													</span></span></span>
+													
+													<p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:18.4px;margin-top:30px"">Thanks, the Nextplace Team</p>
+												
 												</div>
 											</td>
 										</tr></tbody></table></td></tr>
@@ -184,12 +195,14 @@ public class EmailContent
 </body>
 </html>";
 
-    internal static string PropertyValuation(string minValue, string maxValue, string avgValue, string city, string state, 
+    internal static string PropertyValuation(string predictedValue, string minValue, string maxValue, string avgValue, string city, string state, 
         string zipCode, string address, string numberOfBeds, string numberOfBaths, string squareFeet, 
-        string lotSize, string yearBuilt, string hoaDues)
+        string lotSize, string yearBuilt, string hoaDues, string underOver)
     {
         return PropertyValuationTemplate
             .Replace("[Title]", @"Your Property Valuation")
+            .Replace("[PredictedValue]", predictedValue)
+            .Replace("[UnderOver]", underOver)
             .Replace("[Min]", minValue)
             .Replace("[Max]", maxValue)
             .Replace("[Avg]", avgValue)

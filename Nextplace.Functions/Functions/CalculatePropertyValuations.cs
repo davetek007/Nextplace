@@ -35,7 +35,7 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
             foreach (var propertyValuation in propertyValuations)
             {
                 var predictions = propertyValuation.Predictions!
-                    .Where(p => p.Active && p.CreateDate < DateTime.UtcNow.AddMinutes(-2))
+                    .Where(p => p.Active && p.CreateDate < DateTime.UtcNow.AddSeconds(-5))
                     .ToList();
                 
                 if(predictions.Count == 0)
@@ -48,15 +48,26 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                     .Take(10)
                     .ToList();
 
+                var predictedValue = propertyValuation.ProposedListingPrice.ToString("C2");
                 var minSalePrice = topMinerPredictions.Min(p => p.PredictedSalePrice).ToString("C2");
                 var maxSalePrice = topMinerPredictions.Max(p => p.PredictedSalePrice).ToString("C2");
+                var avg = topMinerPredictions.Average(p => p.PredictedSalePrice);
                 var avgSalePrice = topMinerPredictions.Average(p => p.PredictedSalePrice).ToString("C2");
+                var underOver = "neither under nor overvalued";
+                if (propertyValuation.ProposedListingPrice > avg)
+                {
+                    underOver = "overvalued";
+                }
+                else if (propertyValuation.ProposedListingPrice < avg)
+                {
+                    underOver = "undervalued";
+                }
 
                 const string notProvided= @"Not provided";
                 var requestStatus = "Completed";
                 try
                 {
-                    await SendEmail(propertyValuation.RequestorEmailAddress, minSalePrice, maxSalePrice,
+                    await SendEmail(propertyValuation.RequestorEmailAddress, predictedValue, minSalePrice, maxSalePrice,
                         avgSalePrice,
                         propertyValuation.City ?? notProvided, propertyValuation.State ?? notProvided,
                         propertyValuation.ZipCode ?? notProvided,
@@ -72,7 +83,7 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                             : notProvided)!,
                         (propertyValuation.LotSize.HasValue ? propertyValuation.LotSize.ToString() : notProvided)!,
                         (propertyValuation.YearBuilt.HasValue ? propertyValuation.YearBuilt.ToString() : notProvided)!,
-                        (propertyValuation.HoaDues.HasValue ? propertyValuation.HoaDues.ToString() : notProvided)!);
+                        (propertyValuation.HoaDues.HasValue ? propertyValuation.HoaDues.ToString() : notProvided)!, underOver);
                 }
                 catch(Exception ex)
                 {
@@ -99,9 +110,10 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
             await context.SaveLogEntry("CalculatePropertyValuations", ex, executionInstanceId);
         }
     }
-    private async Task SendEmail(string emailAddress, string minValue, string maxValue, string avgValue, string city, string state,
+    
+    private async Task SendEmail(string emailAddress, string predictedValue, string minValue, string maxValue, string avgValue, string city, string state,
         string zipCode, string address, string numberOfBeds, string numberOfBaths, string squareFeet,
-        string lotSize, string yearBuilt, string hoaDues)
+        string lotSize, string yearBuilt, string hoaDues, string underOver)
     {
         var akv = new AkvHelper(configuration);
 
@@ -121,8 +133,8 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                 Body = new ItemBody
                 {
                     ContentType = BodyType.Html,
-                    Content = EmailContent.PropertyValuation(minValue, maxValue, avgValue, city, state, zipCode,
-                        address, numberOfBeds, numberOfBaths, squareFeet, lotSize, yearBuilt, hoaDues)
+                    Content = EmailContent.PropertyValuation(predictedValue, minValue, maxValue, avgValue, city, state, zipCode,
+                        address, numberOfBeds, numberOfBaths, squareFeet, lotSize, yearBuilt, hoaDues, underOver)
                 },
                 ToRecipients = new List<Recipient>
                 {
