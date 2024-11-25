@@ -53,7 +53,10 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                 var maxSalePrice = topMinerPredictions.Max(p => p.PredictedSalePrice).ToString("C2");
                 var avg = topMinerPredictions.Average(p => p.PredictedSalePrice);
                 var avgSalePrice = topMinerPredictions.Average(p => p.PredictedSalePrice).ToString("C2");
-                var underOver = "neither under nor overvalued";
+                var underOver = "overvalued";
+                var diff = Math.Abs(propertyValuation.ProposedListingPrice - avg);
+                var underOverAmount = diff.ToString("C2");
+
                 if (propertyValuation.ProposedListingPrice > avg)
                 {
                     underOver = "overvalued";
@@ -83,7 +86,8 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                             : notProvided)!,
                         (propertyValuation.LotSize.HasValue ? propertyValuation.LotSize.ToString() : notProvided)!,
                         (propertyValuation.YearBuilt.HasValue ? propertyValuation.YearBuilt.ToString() : notProvided)!,
-                        (propertyValuation.HoaDues.HasValue ? propertyValuation.HoaDues.ToString() : notProvided)!, underOver);
+                        (propertyValuation.HoaDues.HasValue ? propertyValuation.HoaDues.ToString() : notProvided)!, 
+                        underOver, underOverAmount);
                 }
                 catch(Exception ex)
                 {
@@ -113,7 +117,7 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
     
     private async Task SendEmail(string emailAddress, string predictedValue, string minValue, string maxValue, string avgValue, string city, string state,
         string zipCode, string address, string numberOfBeds, string numberOfBaths, string squareFeet,
-        string lotSize, string yearBuilt, string hoaDues, string underOver)
+        string lotSize, string yearBuilt, string hoaDues, string underOver, string underOverAmount)
     {
         var akv = new AkvHelper(configuration);
 
@@ -134,7 +138,7 @@ public sealed class CalculatePropertyValuations(ILoggerFactory loggerFactory, Ap
                 {
                     ContentType = BodyType.Html,
                     Content = EmailContent.PropertyValuation(predictedValue, minValue, maxValue, avgValue, city, state, zipCode,
-                        address, numberOfBeds, numberOfBaths, squareFeet, lotSize, yearBuilt, hoaDues, underOver)
+                        address, numberOfBeds, numberOfBaths, squareFeet, lotSize, yearBuilt, hoaDues, underOver, underOverAmount)
                 },
                 ToRecipients = new List<Recipient>
                 {

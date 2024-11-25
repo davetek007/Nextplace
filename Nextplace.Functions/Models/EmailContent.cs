@@ -131,37 +131,36 @@ public class EmailContent
 											<td style=""word-wrap:break-word;font-size:0px;padding:0px 0px 0px 0px;padding-top:0px;padding-bottom:10px;padding-right:25px;padding-left:25px;"" align=""left"">
 												<div style=""cursor:auto;color:#5E6977;font-family:Arial, sans-serif;font-size:13px;line-height:22px;text-align:left;"">
 													<style></style><p style=""margin: 10px 0;""><span style=""font-family:Times New Roman;""><span style=""color:black;""><span style=""font-size:15px;"">
-                                <table role=""presentation"" cellpadding=""0"" cellspacing=""0"" width=""100%"" border=""0"">
-                                    <tbody>
-                                        <tr>
-                                            <td style=""word-wrap:break-word;font-size:0px;padding:0px 25px;"" align=""left"">
-                                                <div style=""cursor:auto;color:#5E6977;font-family:Arial, sans-serif;font-size:13px;line-height:22px;text-align:left;"">                                                   
-                                                    
-                                                    <h2 style=""font-family:Rajdhani,sans-serif;;font-size:32px;font-weight:400; margin-top:30px;color:black"">Valuation Details</h2>
-													<p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:18.4px"">You valued your property at [PredictedValue]. Our miners valued it as follows.</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:30px"">Min Value: [Min]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Max Value: [Max]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Average Value: [Avg]</p>         
-													
-													<p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:18.4px;margin-top:30px"">Based on this, you [UnderOver] your property.</p>
-                                                    
-													
-													<h2 style=""font-family:Rajdhani,sans-serif;;font-size:32px;font-weight:400; margin-top:60px;color:black"">Property Details</h2>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Address: [address]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">City: [city]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">State: [state]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Zip Code: [zipCode]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:40px"">Number of Beds: [numberOfBeds]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Number of Baths: [numberOfBaths]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Square Feet: [squareFeet]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Lot Size: [lotSize]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Year Built: [yearBuilt]</p>
-                                                    <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">HOA Dues: [hoaDues]</p>                                           
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                                                        <table role=""presentation"" cellpadding=""0"" cellspacing=""0"" width=""100%"" border=""0"">
+                                                            <tbody>
+                                                                <tr>
+                                                                    <td style=""word-wrap:break-word;font-size:0px;padding:0px 25px;"" align=""left"">
+                                                                        <div style=""cursor:auto;color:#5E6977;font-family:Arial, sans-serif;font-size:13px;line-height:22px;text-align:left;"">                                                   
+                                                                            
+                                                                            <h2 style=""font-family:Rajdhani,sans-serif;;font-size:32px;font-weight:400; margin-top:30px;color:black"">Valuation Details</h2>
+													                        <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px""><b>You valued your property at [PredictedValue]. Our miners valued it as follows.</b></p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:30px"">Min Value: [Min]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Max Value: [Max]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Average Value: [Avg]</p>         
+													                        
+													                        <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:30px""><b>Based on this, you [UnderOver] your property by [UnderOverAmount].</b></p>
+													                        
+													                        <h2 style=""font-family:Rajdhani,sans-serif;;font-size:32px;font-weight:400; margin-top:60px;color:black"">Property Details</h2>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Address: [address]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">City: [city]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">State: [state]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Zip Code: [zipCode]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px;margin-top:40px"">Number of Beds: [numberOfBeds]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Number of Baths: [numberOfBaths]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Square Feet: [squareFeet]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Lot Size: [lotSize]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">Year Built: [yearBuilt]</p>
+                                                                            <p style=""font-family:Montserrat, sans-serif;font-weight:400;color:black;font-size:16.8px"">HOA Dues: [hoaDues]</p>                                           
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
 													<br />
 													<br />
 													
@@ -197,12 +196,13 @@ public class EmailContent
 
     internal static string PropertyValuation(string predictedValue, string minValue, string maxValue, string avgValue, string city, string state, 
         string zipCode, string address, string numberOfBeds, string numberOfBaths, string squareFeet, 
-        string lotSize, string yearBuilt, string hoaDues, string underOver)
+        string lotSize, string yearBuilt, string hoaDues, string underOver, string underOverAmount)
     {
         return PropertyValuationTemplate
             .Replace("[Title]", @"Your Property Valuation")
             .Replace("[PredictedValue]", predictedValue)
             .Replace("[UnderOver]", underOver)
+            .Replace("[UnderOverAmount]", underOverAmount)
             .Replace("[Min]", minValue)
             .Replace("[Max]", maxValue)
             .Replace("[Avg]", avgValue)
