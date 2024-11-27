@@ -59,7 +59,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                             continue;
                         }
                     }
-                    var scores = dbEntry.Scores!.Where(s => s.Active).ToList();
+                    var scores = dbEntry.Scores!.Where(s => s.Active && s.Score != 0).ToList();
 
                     double? minScore = null;
                     double? avgScore = null;
