@@ -59,7 +59,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                             continue;
                         }
                     }
-                    var scores = dbEntry.Scores!.Where(s => s.Active && s.Score != 0).ToList();
+                    var scores = dbEntry.Scores!.Where(s => s.Active).ToList();
 
                     double? minScore = null;
                     double? avgScore = null;
@@ -72,10 +72,10 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                     List<MinerScore>? minerScores = null;
                     if (scores.Any())
                     {
-                        minScore = scores.Min(s => s.Score);
-                        avgScore = scores.Average(s => s.Score);
-                        maxScore = scores.Max(s => s.Score);
-                        numScores = scores.Select(s => s.ValidatorId).Distinct().Count();
+                        minScore = scores.Where(s=> s.Score != 0).Min(s => s.Score);
+                        avgScore = scores.Where(s => s.Score != 0).Average(s => s.Score);
+                        maxScore = scores.Where(s => s.Score != 0).Max(s => s.Score);
+                        numScores = scores.Where(s => s.Score != 0).Select(s => s.ValidatorId).Distinct().Count();
                         numPredictions = scores.Max(s => s.NumPredictions);
                         totalPredictions = scores.Max(s => s.TotalPredictions);
                         scoreGenerationDate = scores.Max(s => s.ScoreGenerationDate);
