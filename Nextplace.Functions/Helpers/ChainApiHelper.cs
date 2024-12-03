@@ -5,7 +5,7 @@ namespace Nextplace.Functions.Helpers;
 
 internal class ChainApiHelper(IConfiguration configuration)
 {
-    private async Task<List<Item>> GetMetagraph()
+    private async Task<List<DataItem>> GetMetagraph()
     {
         var apiKey = await new AkvHelper(configuration).GetSecretAsync("TaostatsApiKey");
         var url = configuration["TaostatsApiUrl"];
@@ -17,19 +17,19 @@ internal class ChainApiHelper(IConfiguration configuration)
         response.EnsureSuccessStatusCode();
 
         var responseBody = await response.Content.ReadAsStringAsync();
-        var rootObject = JsonConvert.DeserializeObject<Root>(responseBody);
+        var rootObject = JsonConvert.DeserializeObject<RootObject>(responseBody);
 
-        return rootObject == null ? [] : rootObject.Items;
+        return rootObject == null ? [] : rootObject.Data;
     }
 
-    internal async Task<List<Item>> GetValidators()
+    internal async Task<List<DataItem>> GetValidators()
     {
         var metagraph = await GetMetagraph();
 
-        var items = new List<Item>();
+        var items = new List<DataItem>();
         foreach (var item in metagraph.Where(item => item.ValidatorTrust != 0))
         {
-            if (item.AxonInfo == null || string.IsNullOrWhiteSpace(item.AxonInfo.Ip))
+            if (item.Axon == null || string.IsNullOrWhiteSpace(item.Axon.Ip))
             {
                 continue;
             }
@@ -40,18 +40,13 @@ internal class ChainApiHelper(IConfiguration configuration)
         return items;
     }
 
-    internal async Task<List<Item>> GetMiners()
+    internal async Task<List<DataItem>> GetMiners()
     {
         var metagraph = await GetMetagraph();
 
-        var items = new List<Item>();
+        var items = new List<DataItem>();
         foreach (var item in metagraph.Where(item => item.ValidatorTrust == 0))
         {
-            if (item.AxonInfo == null || string.IsNullOrWhiteSpace(item.AxonInfo.Ip))
-            {
-                continue;
-            }
-
             items.Add(item);
         }
 

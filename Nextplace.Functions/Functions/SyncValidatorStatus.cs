@@ -51,7 +51,7 @@ public sealed class SyncValidatorStatus(ILoggerFactory loggerFactory, IConfigura
                 else
                 {
                     validator.LastUpdateDate = DateTime.UtcNow;
-                    validator.IpAddress = validatorDetails.AxonInfo!.Ip;
+                    validator.IpAddress = validatorDetails.Axon!.Ip;
                     validator.Incentive = validatorDetails.Incentive;
                     validator.Active = true;
 
@@ -70,7 +70,7 @@ public sealed class SyncValidatorStatus(ILoggerFactory loggerFactory, IConfigura
                 {
                     HotKey = validatorDetails.Hotkey.Ss58,
                     ColdKey = validatorDetails.Coldkey.Ss58,
-                    IpAddress = validatorDetails.AxonInfo!.Ip,
+                    IpAddress = validatorDetails.Axon!.Ip,
                     Incentive = validatorDetails.Incentive,
                     CreateDate = DateTime.UtcNow,
                     LastUpdateDate = DateTime.UtcNow,

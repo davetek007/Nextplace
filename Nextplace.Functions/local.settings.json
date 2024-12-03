@@ -6,10 +6,10 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "SyncPropertiesTimerSchedule": "0 0 * * * *",
     "SyncMinerStatusTimerSchedule": "0 0 * * * *",
-    "SyncValidatorStatusTimerSchedule": "0 0 * * * *",
+    "CalculatePropertyValuationsTimerSchedule": "0 0 * * * *",
     "SyncPropertyEstimatesTimerSchedule": "0 0 * * * *",
     "CalculatePropertyEstimateStatsTimerSchedule": "0 0 * * * *",
-    "CalculatePropertyValuationsTimerSchedule": "* * * * * *",
+    "SyncValidatorStatusTimerSchedule": "* * * * * *",
     "RetryCount": 6
   }
 }

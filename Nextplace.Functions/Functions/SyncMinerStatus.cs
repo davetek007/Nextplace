@@ -53,7 +53,7 @@ public sealed class SyncMinerStatus(ILoggerFactory loggerFactory, IConfiguration
                     miner.LastUpdateDate = DateTime.UtcNow;
                     miner.Active = true;
                     miner.Incentive = minerDetails.Incentive;
-                    miner.Uid = minerDetails.NeuronId;
+                    miner.Uid = minerDetails.Uid;
 
                     updates++;
                 }
@@ -71,7 +71,7 @@ public sealed class SyncMinerStatus(ILoggerFactory loggerFactory, IConfiguration
                     HotKey = item.Hotkey.Ss58,
                     ColdKey = item.Coldkey.Ss58,
                     Incentive = item.Incentive,
-                    Uid = item.NeuronId,
+                    Uid = item.Uid,
                     CreateDate = DateTime.UtcNow,
                     LastUpdateDate = DateTime.UtcNow,
                     Active = true
