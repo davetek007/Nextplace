@@ -140,8 +140,9 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
     [HttpGet("Current", Name = "GetCurrentProperties")]
     [SwaggerOperation("Get current properties")]
-    public async Task<ActionResult<List<Property>>> GetCurrentProperties()
+    public async Task<ActionResult<List<Property>>> GetCurrentProperties([FromQuery] int? sampleSize)
     {
+
         var executionInstanceId = Guid.NewGuid().ToString();
 
         try
@@ -153,9 +154,15 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             }
 
             await context.SaveLogEntry("GetCurrentProperties", "Started", "Information", executionInstanceId);
+            
+            if (sampleSize.HasValue)
+            {
+                sampleSize = Math.Clamp(sampleSize.Value, 1, 500);
+            }
 
             List<Property> properties;
-            const string cacheKey = "GetCurrentProperties";
+            var cacheKey = "GetCurrentProperties" + (sampleSize.HasValue ? sampleSize.Value : "");
+            
             if (cache.TryGetValue(cacheKey, out var cachedData))
             {
                 properties = (List<Property>)cachedData!;
@@ -163,9 +170,20 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             }
             else
             {
-                var results = await context.Property
-                    .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5))
-                    .ToListAsync();
+                List<PropertyContext> results;
+                if (sampleSize.HasValue)
+                {
+                    results = await context.Property
+                        .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5)).OrderBy(_ => Guid.NewGuid())
+                        .Take(sampleSize.Value)
+                        .ToListAsync();
+                }
+                else
+                {
+                    results = await context.Property
+                        .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5))
+                        .ToListAsync();
+                }
 
                 properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
                             data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
