@@ -60,7 +60,25 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                         }
                     }
 
-                    var scores = dbEntry.Scores!.Where(s => s.Active).ToList();
+                    var activeScores = dbEntry.Scores!.Where(s => s.Active);
+
+                    if (filter is { ValidatorHotKey: not null })
+                    {
+                        activeScores = activeScores.Where(s =>
+                            s.Validator != null && s.Validator.HotKey == filter.ValidatorHotKey);
+                    }
+
+                    if (filter.StartDate.HasValue)
+                    {
+                        activeScores = activeScores.Where(s => s.ScoreGenerationDate >= filter.StartDate.Value);
+                    }
+
+                    if (filter.EndDate.HasValue)
+                    {
+                        activeScores = activeScores.Where(s => s.ScoreGenerationDate <= filter.EndDate.Value);
+                    }
+
+                    var scores = activeScores.ToList();
                     var scoresExceptZero = scores.Where(s => s.Score != 0).ToList();
 
                     double? minScore = null;
@@ -91,8 +109,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
                                 validator = new Validator(score.Validator.HotKey, score.Validator.ColdKey);
                             }
 
-                            minerScores.Add(new MinerScore(score.Score, score.NumPredictions, score.TotalPredictions, score.ScoreGenerationDate,
-                               validator));
+                            minerScores.Add(new MinerScore(score.Score, score.NumPredictions, score.TotalPredictions, score.ScoreGenerationDate, validator));
                         }
                     }
 
