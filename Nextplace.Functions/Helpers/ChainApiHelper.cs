@@ -11,7 +11,7 @@ internal class ChainApiHelper(IConfiguration configuration)
         var url = configuration["TaostatsApiUrl"];
 
         using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("Authorization", apiKey);
+        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", apiKey);
         var response = await httpClient.GetAsync(url);
 
         response.EnsureSuccessStatusCode();
