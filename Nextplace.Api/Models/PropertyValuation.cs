@@ -21,52 +21,55 @@ public class PropertyValuation(
     double proposedListingPrice,
     DateTime createDate,
     DateTime lastUpdateDate,
-    bool active)
+    bool active,
+    string? country)
 {
-    [Required]
-    public long Id { get; } = id;
+  [Required]
+  public long Id { get; } = id;
 
-    [Required]
-    [MaxLength(450)]
-    public string NextplaceId { get; } = nextplaceId;
+  [Required]
+  [MaxLength(450)]
+  public string NextplaceId { get; } = nextplaceId;
 
-    [Required]
-    public double Longitude { get; set; } = longitude;
+  [Required]
+  public double Longitude { get; set; } = longitude;
 
-    [Required]
-    public double Latitude { get; set; } = latitude;
-    [Required]
-    public int PropertyType { get; } = propertyType;
+  [Required]
+  public double Latitude { get; set; } = latitude;
+  [Required]
+  public int PropertyType { get; } = propertyType;
 
-    [Required]
-    public double ProposedListingPrice { get; set; } = proposedListingPrice;
+  [Required]
+  public double ProposedListingPrice { get; set; } = proposedListingPrice;
 
-    public string? City { get; } = city;
+  public string? City { get; } = city;
 
-    public string? State { get; } = state;
+  public string? State { get; } = state;
 
-    public string? ZipCode { get; } = zipCode;
+  public string? ZipCode { get; } = zipCode;
 
-    public string? Address { get; } = address;
+  public string? Address { get; } = address;
 
-    public int? NumberOfBeds { get; } = numberOfBeds;
+  public string? Country { get; } = country;
 
-    public double? NumberOfBaths { get; } = numberOfBaths;
+  public int? NumberOfBeds { get; } = numberOfBeds;
 
-    public int? SquareFeet { get; } = squareFeet;
+  public double? NumberOfBaths { get; } = numberOfBaths;
 
-    public long? LotSize { get; } = lotSize;
+  public int? SquareFeet { get; } = squareFeet;
 
-    public int? YearBuilt { get; } = yearBuilt;
+  public long? LotSize { get; } = lotSize;
 
-    public int? HoaDues { get; } = hoaDues;
+  public int? YearBuilt { get; } = yearBuilt;
 
-    [Required]
-    public DateTime CreateDate { get; } = createDate;
+  public int? HoaDues { get; } = hoaDues;
 
-    [Required]
-    public DateTime LastUpdateDate { get; } = lastUpdateDate;
+  [Required]
+  public DateTime CreateDate { get; } = createDate;
 
-    [Required]
-    public bool Active { get; } = active;
+  [Required]
+  public DateTime LastUpdateDate { get; } = lastUpdateDate;
+
+  [Required]
+  public bool Active { get; } = active;
 }

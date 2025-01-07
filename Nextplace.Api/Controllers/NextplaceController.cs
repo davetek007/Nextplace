@@ -2,8 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Reflection;
-using Microsoft.Graph.Models.ExternalConnectors;
-using Microsoft.Graph.Models.Security;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Nextplace.Api.Controllers;

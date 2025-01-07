@@ -5,116 +5,121 @@ namespace Nextplace.Api.Db;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<Miner> Miner => Set<Miner>();
+  public DbSet<Miner> Miner => Set<Miner>();
 
-    public DbSet<Property> Property => Set<Property>();
+  public DbSet<MinerDatedScore> MinerDatedScore => Set<MinerDatedScore>();
 
-    public DbSet<PropertyValuation> PropertyValuation => Set<PropertyValuation>();
+  public DbSet<Property> Property => Set<Property>();
 
-    public DbSet<PropertyValuationPrediction> PropertyValuationPrediction => Set<PropertyValuationPrediction>();
+  public DbSet<PropertyValuation> PropertyValuation => Set<PropertyValuation>();
 
-    public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
+  public DbSet<PropertyValuationPrediction> PropertyValuationPrediction => Set<PropertyValuationPrediction>();
 
-    public DbSet<ApiLog> ApiLog => Set<ApiLog>();
+  public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
 
-    public DbSet<MinerScore> MinerScore => Set<MinerScore>();
+  public DbSet<ApiLog> ApiLog => Set<ApiLog>();
 
-    public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
+  public DbSet<MinerScore> MinerScore => Set<MinerScore>();
 
-    public DbSet<Validator> Validator => Set<Validator>();
+  public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+  public DbSet<Validator> Validator => Set<Validator>();
+
+  protected override void OnModelCreating(ModelBuilder modelBuilder)
+  {
+    modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
+        .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
+    modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)
+        .HasForeignKey(tgp => tgp.MinerId);
+
+    modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.Predictions)
+        .HasForeignKey(tgp => tgp.ValidatorId);
+
+    modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Property).WithMany(m => m.Predictions)
+        .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
+    modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Miner).WithMany(m => m.Scores)
+        .HasForeignKey(tgp => tgp.MinerId);
+
+    modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Validator).WithMany(m => m.MinerScores)
+      .HasForeignKey(tgp => tgp.ValidatorId);
+
+    modelBuilder.Entity<MinerDatedScore>().HasOne(tgp => tgp.MinerScore).WithMany(m => m.MinerDatedScores)
+      .HasForeignKey(tgp => tgp.MinerScoreId);
+
+    modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.ValuationPredictions)
+        .HasForeignKey(tgp => tgp.MinerId);
+
+    modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.ValuationPredictions)
+        .HasForeignKey(tgp => tgp.ValidatorId);
+
+    modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.PropertyValuation).WithMany(m => m.Predictions)
+        .HasForeignKey(tgp => tgp.PropertyValuationId); base.OnModelCreating(modelBuilder);
+
+    foreach (var entityType in modelBuilder.Model.GetEntityTypes())
     {
-        modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
-            .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)
-            .HasForeignKey(tgp => tgp.MinerId);
-
-        modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.Predictions)
-            .HasForeignKey(tgp => tgp.ValidatorId);
-
-        modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Property).WithMany(m => m.Predictions)
-            .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Miner).WithMany(m => m.Scores)
-            .HasForeignKey(tgp => tgp.MinerId);
-
-        modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Validator).WithMany(m => m.MinerScores)
-            .HasForeignKey(tgp => tgp.ValidatorId);
-
-        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.ValuationPredictions)
-            .HasForeignKey(tgp => tgp.MinerId);
-
-        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.ValuationPredictions)
-            .HasForeignKey(tgp => tgp.ValidatorId);
-
-        modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.PropertyValuation).WithMany(m => m.Predictions)
-            .HasForeignKey(tgp => tgp.PropertyValuationId); base.OnModelCreating(modelBuilder);
-
-        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
-        {
-            modelBuilder.Entity(entityType.ClrType)
-                .Ignore("Deleted")
-                .Ignore("UpdatedAt")
-                .Ignore("Version");
-        }
+      modelBuilder.Entity(entityType.ClrType)
+          .Ignore("Deleted")
+          .Ignore("UpdatedAt")
+          .Ignore("Version");
     }
+  }
 
-    public async Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId)
+  public async Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId)
+  {
+    ApiLog.Add(new ApiLog
     {
-        ApiLog.Add(new ApiLog
-        {
-            ApiName = apiName,
-            LogEntry = logEntry,
-            EntryType = entryType,
-            TimeStamp = DateTime.UtcNow,
-            ExecutionInstanceId = executionInstanceId
-        });
+      ApiName = apiName,
+      LogEntry = logEntry,
+      EntryType = entryType,
+      TimeStamp = DateTime.UtcNow,
+      ExecutionInstanceId = executionInstanceId
+    });
 
-        await SaveChangesAsync();
-    }
+    await SaveChangesAsync();
+  }
 
-    public async Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId)
+  public async Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId)
+  {
+    ApiLog.Add(new ApiLog
     {
-        ApiLog.Add(new ApiLog
-        {
-            ApiName = apiName,
-            LogEntry = ExceptionToString(ex),
-            EntryType = "Error",
-            TimeStamp = DateTime.UtcNow,
-            ExecutionInstanceId = executionInstanceId
-        });
+      ApiName = apiName,
+      LogEntry = ExceptionToString(ex),
+      EntryType = "Error",
+      TimeStamp = DateTime.UtcNow,
+      ExecutionInstanceId = executionInstanceId
+    });
 
-        await SaveChangesAsync();
-    }
+    await SaveChangesAsync();
+  }
 
-    public static string ExceptionToString(Exception ex)
+  public static string ExceptionToString(Exception ex)
+  {
+    var sb = new StringBuilder();
+    FormatException(sb, ex, 0);
+
+    return sb.ToString();
+  }
+
+  private static void FormatException(StringBuilder sb, Exception ex, int level)
+  {
+    while (true)
     {
-        var sb = new StringBuilder();
-        FormatException(sb, ex, 0);
+      var indent = new string(' ', level * 2);
+      sb.AppendLine($"{indent}Exception: {ex.GetType().FullName}");
+      sb.AppendLine($"{indent}Message: {ex.Message}");
+      sb.AppendLine($"{indent}StackTrace: {ex.StackTrace}");
 
-        return sb.ToString();
+      if (ex.InnerException != null)
+      {
+        sb.AppendLine($"{indent}Inner Exception:");
+        ex = ex.InnerException;
+        level += 1;
+        continue;
+      }
+
+      break;
     }
-
-    private static void FormatException(StringBuilder sb, Exception ex, int level)
-    {
-        while (true)
-        {
-            var indent = new string(' ', level * 2);
-            sb.AppendLine($"{indent}Exception: {ex.GetType().FullName}");
-            sb.AppendLine($"{indent}Message: {ex.Message}");
-            sb.AppendLine($"{indent}StackTrace: {ex.StackTrace}");
-
-            if (ex.InnerException != null)
-            {
-                sb.AppendLine($"{indent}Inner Exception:");
-                ex = ex.InnerException;
-                level += 1;
-                continue;
-            }
-
-            break;
-        }
-    }
+  }
 }

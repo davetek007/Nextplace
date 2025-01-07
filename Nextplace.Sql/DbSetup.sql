@@ -1,6 +1,7 @@
 create table dbo.Market (
 	id int identity(1,1) primary key not null, 
 	name nvarchar(450) not null, 
+	country [nvarchar](450) NULL,
 	externalId nvarchar(450) not null,
 	[createDate] [datetime2](7) NOT NULL,
 	[lastUpdateDate] [datetime2](7) NOT NULL,
@@ -15,6 +16,7 @@ create table dbo.PropertyValuation (
 	[city] [nvarchar](450) NULL,
 	[state] [nvarchar](450) NULL,
 	[zipCode] [nvarchar](450) NULL,
+	country [nvarchar](450) NULL,
 	[address] [nvarchar](450) NULL,
 	[numberOfBeds] [int] NULL,
 	[numberOfBaths] [float] NULL,
@@ -43,6 +45,7 @@ create table dbo.Property (
 	[state] [nvarchar](450) NULL,
 	[zipCode] [nvarchar](450) NULL,
 	[address] [nvarchar](450) NULL,
+	country [nvarchar](450) NULL,
 	[listingDate] [datetime2](7) NOT NULL,
 	[listingPrice] [float] NOT NULL,
 	[numberOfBeds] [int] NULL,
@@ -111,6 +114,16 @@ create table dbo.MinerScore (
 	numPredictions int not null,
 	totalPredictions int not null,
 	scoreGenerationDate datetime2 not null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go  
+
+create table dbo.MinerDatedScore (
+	id bigint identity (1,1) primary key not null,
+	minerScoreId bigint foreign key references dbo.MinerScore (id) not null, 
+	date datetime2 not null, 
+	totalScored int not null,
 	createDate datetime2 not null,
 	lastUpdateDate datetime2 not null,
 	active bit not null)

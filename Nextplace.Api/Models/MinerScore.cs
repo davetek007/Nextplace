@@ -2,7 +2,7 @@
 
 namespace Nextplace.Api.Models;
 
-public class MinerScore(double score, int numPredictions, int totalPredictions, DateTime scoreGenerationDate, Validator? validator)
+public class MinerScore(double score, int numPredictions, int totalPredictions, DateTime scoreGenerationDate, Validator? validator, List<MinerDatedScore>? minerDatedScores)
 {
     [Required] public double Score { get; } = score;
 
@@ -13,4 +13,6 @@ public class MinerScore(double score, int numPredictions, int totalPredictions, 
     [Required] public DateTime ScoreGenerationDate { get; } = scoreGenerationDate;
 
     public Validator? Validator { get; } = validator;
+
+    public List<MinerDatedScore>? MinerDatedScores { get; } = minerDatedScores;
 }

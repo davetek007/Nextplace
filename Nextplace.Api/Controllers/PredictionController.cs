@@ -375,7 +375,8 @@ public class PredictionController(AppDbContext context, IConfiguration configura
                 data.Property.SalePrice,
                 data.Property.CreateDate,
                 data.Property.LastUpdateDate,
-                data.Property.Active) 
+                data.Property.Active, 
+                data.Property.Country) 
             };
 
             propertyPredictions.Add(teamGamePrediction);

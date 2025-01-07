@@ -16,39 +16,42 @@ public class PostPropertyValuationRequest(
     long? lotSize,
     int? yearBuilt,
     int? hoaDues,
-    int propertyType, 
-    double proposedListingPrice)
+    int propertyType,
+    double proposedListingPrice,
+    string? country)
 {
-    [Required]
-    public string RequestorEmailAddress { get; } = requestorEmailAddress;
+  [Required]
+  public string RequestorEmailAddress { get; } = requestorEmailAddress;
 
-    [Required]
-    public double Longitude { get; set; } = longitude;
+  [Required]
+  public double Longitude { get; set; } = longitude;
 
-    [Required]
-    public double Latitude { get; set; } = latitude;
+  [Required]
+  public double Latitude { get; set; } = latitude;
 
-    public string? City { get; } = city;
+  public string? City { get; } = city;
 
-    public string? State { get; } = state;
+  public string? Country { get; } = country;
 
-    public string? ZipCode { get; } = zipCode;
+  public string? State { get; } = state;
 
-    public string? Address { get; } = address;
+  public string? ZipCode { get; } = zipCode;
 
-    public int? NumberOfBeds { get; } = numberOfBeds;
+  public string? Address { get; } = address;
 
-    public double? NumberOfBaths { get; } = numberOfBaths;
+  public int? NumberOfBeds { get; } = numberOfBeds;
 
-    public int? SquareFeet { get; } = squareFeet;
+  public double? NumberOfBaths { get; } = numberOfBaths;
 
-    public long? LotSize { get; } = lotSize;
+  public int? SquareFeet { get; } = squareFeet;
 
-    public int? YearBuilt { get; } = yearBuilt;
+  public long? LotSize { get; } = lotSize;
 
-    public int? HoaDues { get; } = hoaDues;
+  public int? YearBuilt { get; } = yearBuilt;
 
-    public int PropertyType { get; } = propertyType;
+  public int? HoaDues { get; } = hoaDues;
 
-    public double ProposedListingPrice { get; } = proposedListingPrice;
+  public int PropertyType { get; } = propertyType;
+
+  public double ProposedListingPrice { get; } = proposedListingPrice;
 }

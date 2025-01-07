@@ -31,4 +31,7 @@ public sealed class MinerScore : EntityTableData
     public Miner Miner { get; init; } = null!;
 
     public Validator? Validator { get; init; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<MinerDatedScore>? MinerDatedScores { get; init; }
 }

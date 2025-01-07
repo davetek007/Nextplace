@@ -53,6 +53,8 @@ public sealed class Property : EntityTableData
     public DateTime? SaleDate { get; set; }
 
     public double? SalePrice { get; set; }
+    
+    public string? Country { get; set; }
 
     public required DateTime CreateDate { get; init; }
 

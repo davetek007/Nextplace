@@ -28,79 +28,81 @@ public class Property(
     double? salePrice,
     DateTime createDate,
     DateTime lastUpdateDate,
-    bool active)
+    bool active, string? country)
 {
-    [Required]
-    public long Id { get; } = id;
+  [Required]
+  public long Id { get; } = id;
 
-    [Required]
-    [MaxLength(450)]
-    public long PropertyId { get; } = propertyId;
+  [Required]
+  [MaxLength(450)]
+  public long PropertyId { get; } = propertyId;
 
-    [Required]
-    [MaxLength(450)]
-    public string NextplaceId { get; } = nextplaceId;
+  [Required]
+  [MaxLength(450)]
+  public string NextplaceId { get; } = nextplaceId;
 
-    [Required]
-    [MaxLength(450)]
-    public long ListingId { get; } = listingId;
+  [Required]
+  [MaxLength(450)]
+  public long ListingId { get; } = listingId;
 
-    [Required]
-    public double Longitude { get; set; } = longitude;
+  [Required]
+  public double Longitude { get; set; } = longitude;
 
-    [Required]
-    public double Latitude { get; set; } = latitude;
+  [Required]
+  public double Latitude { get; set; } = latitude;
 
-    [Required]
-    public string Market { get; } = market;
+  [Required]
+  public string Market { get; } = market;
 
-    public string? City { get; } = city;
+  public string? City { get; } = city;
 
-    public string? State { get; } = state;
+  public string? State { get; } = state;
 
-    public string? ZipCode { get; } = zipCode;
+  public string? ZipCode { get; } = zipCode;
 
-    public string? Address { get; } = address;
+  public string? Country { get; } = country;
 
-    [Required]
-    public DateTime ListingDate { get; } = listingDate;
+  public string? Address { get; } = address;
 
-    [Required]
-    public double ListingPrice { get; set; } = listingPrice;
+  [Required]
+  public DateTime ListingDate { get; } = listingDate;
 
-    public int? NumberOfBeds { get; } = numberOfBeds;
+  [Required]
+  public double ListingPrice { get; set; } = listingPrice;
 
-    public double? NumberOfBaths { get; } = numberOfBaths;
+  public int? NumberOfBeds { get; } = numberOfBeds;
 
-    public int? SquareFeet { get; } = squareFeet;
+  public double? NumberOfBaths { get; } = numberOfBaths;
 
-    public long? LotSize { get; } = lotSize;
+  public int? SquareFeet { get; } = squareFeet;
 
-    public int? YearBuilt { get; } = yearBuilt;
+  public long? LotSize { get; } = lotSize;
 
-    [Required]
-    [MaxLength(450)]
-    public string PropertyType { get; } = propertyType;
+  public int? YearBuilt { get; } = yearBuilt;
 
-    public DateTime? LastSaleDate { get; } = lastSaleDate;
+  [Required]
+  [MaxLength(450)]
+  public string PropertyType { get; } = propertyType;
 
-    public int? HoaDues { get; } = hoaDues;
+  public DateTime? LastSaleDate { get; } = lastSaleDate;
 
-    public DateTime? SaleDate { get; } = saleDate;
+  public int? HoaDues { get; } = hoaDues;
 
-    public double? SalePrice { get; set; } = salePrice;
+  public DateTime? SaleDate { get; } = saleDate;
 
-    [Required]
-    public DateTime CreateDate { get; } = createDate;
+  public double? SalePrice { get; set; } = salePrice;
 
-    [Required]
-    public DateTime LastUpdateDate { get; } = lastUpdateDate;
+  [Required]
+  public DateTime CreateDate { get; } = createDate;
 
-    [Required]
-    public bool Active { get; } = active;
+  [Required]
+  public DateTime LastUpdateDate { get; } = lastUpdateDate;
 
-    [Required]
-    public List<PropertyPrediction> Predictions { get; set; } = null!;
+  [Required]
+  public bool Active { get; } = active;
 
-    public PropertyEstimateStats? EstimateStats { get; set; } = null!;
+  [Required]
+  public List<PropertyPrediction> Predictions { get; set; } = null!;
+
+  public PropertyEstimateStats? EstimateStats { get; set; } = null!;
 }
