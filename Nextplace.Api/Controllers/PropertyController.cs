@@ -9,6 +9,7 @@ using Property = Nextplace.Api.Models.Property;
 using PropertyContext = Nextplace.Api.Db.Property;
 using Microsoft.Extensions.Caching.Memory;
 using PropertyValuation = Nextplace.Api.Db.PropertyValuation;
+using Nextplace.Api.Helpers;
 
 namespace Nextplace.Api.Controllers;
 
@@ -139,9 +140,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
   [HttpGet("Current", Name = "GetCurrentProperties")]
   [SwaggerOperation("Get current properties")]
-  public async Task<ActionResult<List<Property>>> GetCurrentProperties([FromQuery] int? sampleSize)
+  public async Task<ActionResult<List<Property>>> GetCurrentProperties([FromQuery] int? sampleSize, [FromQuery] double? minLatitude, [FromQuery] double? minLongitude, [FromQuery] double? maxLatitude, [FromQuery] double? maxLongitude)
   {
-
     var executionInstanceId = Guid.NewGuid().ToString();
 
     try
@@ -160,8 +160,10 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       }
 
       List<Property> properties;
-      var cacheKey = "GetCurrentProperties" + (sampleSize.HasValue ? sampleSize.Value : "");
-
+      var cacheKey = "GetCurrentProperties" + (sampleSize.HasValue ? sampleSize.Value : "") +
+                     (minLatitude.HasValue ? minLatitude.Value : "") + (minLongitude.HasValue ? minLongitude.Value : "") +
+                     (maxLatitude.HasValue ? maxLatitude.Value : "") + (maxLongitude.HasValue ? maxLongitude.Value : "");
+      
       if (cache.TryGetValue(cacheKey, out var cachedData))
       {
         properties = (List<Property>)cachedData!;
@@ -169,20 +171,27 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       }
       else
       {
-        List<PropertyContext> results;
+        IQueryable<PropertyContext> query;
         if (sampleSize.HasValue)
         {
-          results = await context.Property
-              .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5)).OrderBy(_ => Guid.NewGuid())
-              .Take(sampleSize.Value)
-              .ToListAsync();
+          query = context.Property
+            .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5)).OrderBy(_ => Guid.NewGuid())
+            .Take(sampleSize.Value);
         }
         else
         {
-          results = await context.Property
-              .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5))
-              .ToListAsync();
+          query = context.Property
+            .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5));
         }
+        
+        if (minLatitude.HasValue && minLongitude.HasValue && maxLatitude.HasValue && maxLongitude.HasValue)
+        {
+          query = query.Where(p =>
+            p.Latitude >= minLatitude && p.Latitude <= maxLatitude && 
+            p.Longitude >= minLongitude && p.Longitude <= maxLongitude);
+        }
+
+        var results = await query.ToListAsync();
 
         properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
                     data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
@@ -288,6 +297,17 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       await context.SaveLogEntry("PostPropertyValuation", "Started", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPropertyValuation", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
 
+      var searchString = request.Address + " " + request.City + " " + request.State + " " + request.ZipCode;
+      searchString = searchString.Replace(" ", "-");
+
+      float? estimatedListingPrice = null;
+      var estimates = await GetEstimatedListingPriceForProperty(searchString);
+
+      if (estimates != null && estimates.Count != 0)
+      {
+        estimatedListingPrice = estimates.OrderByDescending(e => e.Timestamp).First().Value;
+      }
+
       var dbEntry = new PropertyValuation
       {
         RequestStatus = "New",
@@ -308,7 +328,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         HoaDues = request.HoaDues,
         RequestorEmailAddress = request.RequestorEmailAddress,
         PropertyType = request.PropertyType,
-        ProposedListingPrice = request.ProposedListingPrice
+        ProposedListingPrice = request.ProposedListingPrice,
+        EstimatedListingPrice = estimatedListingPrice
       };
 
       context.PropertyValuation.Add(dbEntry);
@@ -324,6 +345,87 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     {
       await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
       return StatusCode(500);
+    }
+  }
+  
+  public class Estimate
+  {
+    [JsonProperty("T")]
+    public long Timestamp { get; set; }
+
+    [JsonProperty("V")]
+    public int Value { get; set; }
+  }
+
+  private async Task<List<Estimate>?> GetEstimatedListingPriceForProperty(string searchString)
+  {
+    const int maxRequestsPerSecond = 3;
+    string? responseBody = null;
+    var url = config["ZillowApiUrl"];
+    using var httpClient = new HttpClient();
+    
+    var apiKey = await new AkvHelper(config).GetSecretAsync("ZillowApiKey");
+
+    httpClient.DefaultRequestHeaders.Add("x-rapidapi-host", config["ZillowApiHost"]);
+    httpClient.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
+
+    var delayBetweenRequests = 1000 / maxRequestsPerSecond;
+
+    try
+    {
+      var retryCount = 0;
+      const int maxRetries = 3;
+      bool shouldRetry;
+
+      do
+      {
+        shouldRetry = false;
+        var response = await httpClient.GetAsync(url + searchString);
+
+        if (response.StatusCode == (System.Net.HttpStatusCode)429)
+        {
+          retryCount++;
+
+          if (response.Headers.TryGetValues("Retry-After", out var retryAfterValues))
+          {
+            if (int.TryParse(retryAfterValues.FirstOrDefault(), out var retryAfterSeconds))
+            {
+              await Task.Delay(retryAfterSeconds * 1000);
+            }
+          }
+          else
+          {
+            await Task.Delay(1000 * retryCount);
+          }
+
+          shouldRetry = retryCount < maxRetries;
+        }
+        else
+        {
+          response.EnsureSuccessStatusCode();
+          responseBody = await response.Content.ReadAsStringAsync();
+
+          await Task.Delay(delayBetweenRequests);
+        }
+      }
+      while (shouldRetry);
+
+      if (responseBody is null or "{}")
+      {
+        return null;
+      }
+
+      var rootObject = JsonConvert.DeserializeObject<List<Estimate>>(responseBody);
+      return rootObject;
+    }
+    catch (Exception ex)
+    {
+      if (!string.IsNullOrWhiteSpace(responseBody))
+      {
+        throw new Exception($"Error received from API call: {responseBody}", ex);
+      }
+
+      throw;
     }
   }
 
@@ -804,7 +906,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
           data.SalePrice,
           data.CreateDate,
           data.LastUpdateDate,
-          data.Active, 
+          data.Active,
           data.Country)
       {
         Predictions = []
