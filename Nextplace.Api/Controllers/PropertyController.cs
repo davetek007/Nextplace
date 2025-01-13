@@ -265,7 +265,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             data.CreateDate,
             data.LastUpdateDate,
             data.Active,
-            data.Country);
+            data.Country, 
+            data.EstimatedListingPrice);
 
         propertyValuations.Add(propertyValuation);
       }

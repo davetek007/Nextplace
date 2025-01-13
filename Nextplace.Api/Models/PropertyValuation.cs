@@ -22,7 +22,8 @@ public class PropertyValuation(
     DateTime createDate,
     DateTime lastUpdateDate,
     bool active,
-    string? country)
+    string? country,
+    double? listingPrice)
 {
   [Required]
   public long Id { get; } = id;
@@ -41,6 +42,9 @@ public class PropertyValuation(
 
   [Required]
   public double ProposedListingPrice { get; set; } = proposedListingPrice;
+
+  [Required]
+  public double? ListingPrice { get; set; } = listingPrice;
 
   public string? City { get; } = city;
 
