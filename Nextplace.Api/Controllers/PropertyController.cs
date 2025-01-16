@@ -245,6 +245,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       var propertyValuations = new List<Models.PropertyValuation>();
       foreach (var data in results)
       {
+        var proposedListingPrice = data.EstimatedListingPrice ?? data.ProposedListingPrice;
+        
         var propertyValuation = new Models.PropertyValuation(
             data.Id,
             data.NextplaceId,
@@ -261,7 +263,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             data.YearBuilt,
             data.HoaDues,
             data.PropertyType,
-            data.ProposedListingPrice,
+            proposedListingPrice,
             data.CreateDate,
             data.LastUpdateDate,
             data.Active,
@@ -344,7 +346,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     }
     catch (Exception ex)
     {
-      await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
+      await context.SaveLogEntry("PostPropertyValuation", ex, executionInstanceId);
       return StatusCode(500);
     }
   }
