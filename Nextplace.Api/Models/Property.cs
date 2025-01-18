@@ -28,7 +28,8 @@ public class Property(
     double? salePrice,
     DateTime createDate,
     DateTime lastUpdateDate,
-    bool active, string? country)
+    bool active, 
+    string? country)
 {
   [Required]
   public long Id { get; } = id;
@@ -91,6 +92,8 @@ public class Property(
   public DateTime? SaleDate { get; } = saleDate;
 
   public double? SalePrice { get; set; } = salePrice;
+
+  public List<string>? ImageIds { get; set; }
 
   [Required]
   public DateTime CreateDate { get; } = createDate;

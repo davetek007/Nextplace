@@ -33,6 +33,39 @@ create table dbo.PropertyValuation (
 	[lastUpdateDate] [datetime2](7) NOT NULL,
 	[active] [bit] NOT NULL)
 go
+	
+create table dbo.[User] (
+	id bigint identity (1,1) primary key not null,
+	password nvarchar(450) not null,
+	salt nvarchar(450) not null,
+	emailAddress nvarchar(450) not null,
+	validationKey nvarchar(450) null, 
+	sessionToken nvarchar(450) null, 
+	status nvarchar(450) not null,
+	userType nvarchar(450) null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go
+
+create table dbo.UserFavorite (
+	id bigint identity (1,1) primary key not null, 
+	userId bigint foreign key references dbo.[User] (id) not null,	
+	[nextplaceId] [nvarchar](450) NOT NULL,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go
+
+create table dbo.UserSetting (
+	id bigint identity (1,1) primary key not null, 
+	userId bigint foreign key references dbo.[User] (id) not null,	
+	settingName [nvarchar](450) NOT NULL,
+	settingValue [nvarchar](max) NOT NULL,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go
 
 create table dbo.Property (
 	id bigint identity (1,1) primary key not null,
@@ -63,6 +96,15 @@ create table dbo.Property (
 	[lastUpdateDate] [datetime2](7) NOT NULL,
 	[active] [bit] NOT NULL,
 	estimatesCollected bit not null)
+go
+
+create table dbo.PropertyImage (
+	id bigint identity (1,1) primary key not null, 
+	propertyId bigint foreign key references dbo.Property (id) not null,
+	imageId nvarchar (450) not null, 
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
 go
 
 create table dbo.PropertyEstimate (
@@ -180,7 +222,8 @@ create table dbo.ApiLog (
 	logEntry nvarchar(max) not null,	
 	entryType nvarchar(450) not null,	
 	timeStamp datetime2(7) not null,
-	executionInstanceId nvarchar(450) not null)
+	executionInstanceId nvarchar(450) not null,
+	ipAddress nvarchar(450) null)
 go
 
 create nonclustered index ixnMinerHotKeyColdKey on dbo.Miner(hotKey, coldKey)

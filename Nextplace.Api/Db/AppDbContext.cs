@@ -15,6 +15,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
   public DbSet<PropertyValuationPrediction> PropertyValuationPrediction => Set<PropertyValuationPrediction>();
 
+  public DbSet<PropertyImage> PropertyImage => Set<PropertyImage>();
+
   public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
 
   public DbSet<ApiLog> ApiLog => Set<ApiLog>();
@@ -25,10 +27,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
   public DbSet<Validator> Validator => Set<Validator>();
 
+  public DbSet<User> User => Set<User>();
+
+  public DbSet<UserSetting> UserSetting => Set<UserSetting>();
+
+  public DbSet<UserFavorite> UserFavorite => Set<UserFavorite>();
+
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
     modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
-        .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+      .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+    
+    modelBuilder.Entity<PropertyImage>().HasOne(tgp => tgp.Property).WithMany(m => m.Images)
+      .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
     modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)
         .HasForeignKey(tgp => tgp.MinerId);
@@ -57,6 +68,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.PropertyValuation).WithMany(m => m.Predictions)
         .HasForeignKey(tgp => tgp.PropertyValuationId); base.OnModelCreating(modelBuilder);
 
+    modelBuilder.Entity<UserSetting>().HasOne(tgp => tgp.User).WithMany(m => m.UserSettings)
+      .HasForeignKey(tgp => tgp.UserId); base.OnModelCreating(modelBuilder);
+
+    modelBuilder.Entity<UserFavorite>().HasOne(tgp => tgp.User).WithMany(m => m.UserFavorites)
+      .HasForeignKey(tgp => tgp.UserId); base.OnModelCreating(modelBuilder);
+
     foreach (var entityType in modelBuilder.Model.GetEntityTypes())
     {
       modelBuilder.Entity(entityType.ClrType)
@@ -64,6 +81,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
           .Ignore("UpdatedAt")
           .Ignore("Version");
     }
+  }
+
+  public async Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId, string? ipAddress)
+  {
+    ApiLog.Add(new ApiLog
+    {
+      ApiName = apiName,
+      LogEntry = logEntry,
+      EntryType = entryType,
+      TimeStamp = DateTime.UtcNow,
+      ExecutionInstanceId = executionInstanceId,
+      IpAddress = ipAddress
+    });
+
+    await SaveChangesAsync();
+  }
+
+  public async Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId, string? ipAddress)
+  {
+    ApiLog.Add(new ApiLog
+    {
+      ApiName = apiName,
+      LogEntry = ExceptionToString(ex),
+      EntryType = "Error",
+      TimeStamp = DateTime.UtcNow,
+      ExecutionInstanceId = executionInstanceId,
+      IpAddress = ipAddress
+    });
+
+    await SaveChangesAsync();
   }
 
   public async Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId)

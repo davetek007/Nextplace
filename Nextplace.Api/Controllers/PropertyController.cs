@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Nextplace.Api.Db;
 using Nextplace.Api.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,7 @@ using PropertyContext = Nextplace.Api.Db.Property;
 using Microsoft.Extensions.Caching.Memory;
 using PropertyValuation = Nextplace.Api.Db.PropertyValuation;
 using Nextplace.Api.Helpers;
+using System.Text;
 
 namespace Nextplace.Api.Controllers;
 
@@ -597,6 +599,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       await context.SaveLogEntry("GetProperty", "Started", "Information", executionInstanceId);
       var property = await context.Property
           .Include(tg => tg.EstimateStats)
+          .Include(tg => tg.Images)
           .Include(tg => tg.Predictions)!
           .ThenInclude(propertyPrediction => propertyPrediction.Miner).OrderByDescending(p => p.ListingDate)
           .FirstOrDefaultAsync(tg => tg.NextplaceId == nextplaceId);
@@ -639,7 +642,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       {
         Predictions = []
       };
-
+       
+      tg.ImageIds = await GetPropertyImageIds(property);
       var e = property.EstimateStats!.MaxBy(e => e.CreateDate);
       if (e != null)
       {
@@ -669,6 +673,143 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       await context.SaveLogEntry("GetProperty", ex, executionInstanceId);
       return StatusCode(500);
     }
+  }
+
+  private async Task<List<string>?> GetPropertyImageIds(PropertyContext property)
+  {
+    if (property.Images != null && property.Images.Count != 0)
+    {
+      return property.Images.Select(i => i.ImageId).ToList();
+    }
+
+    if (property.Address == null || property.City == null || property.State == null || property.ZipCode == null)
+    {
+      return null;
+    }
+
+    try
+    {
+      var blobHelper = new BlobHelper(config);
+      var lookupUrl =
+        $"https://www.redfin.com/{property.State}/{property.City}/{property.Address}-{property.ZipCode}/home/{property.PropertyId}".Replace(" ", "-");
+
+      var apiUrl = $"{config["RedfinPropertyImageUrl"]!}{lookupUrl}";
+
+      var apiKey = await new AkvHelper(config).GetSecretAsync("RedfinApiKey");
+
+      var httpClient = new HttpClient();
+      httpClient.DefaultRequestHeaders.Add("x-rapidapi-host", config["RedfinApiHost"]);
+      httpClient.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
+
+      var response = await httpClient.GetAsync(apiUrl);
+      var json = await response.Content.ReadAsStringAsync();
+      response.EnsureSuccessStatusCode();
+
+      var photoUrls = GetFullScreenPhotoUrls(json);
+
+      if (photoUrls == null)
+      {
+        return null;
+      }
+      
+      var imageIds = new List<string>();
+      var propertyImages = new List<PropertyImage>();
+
+      var tasks = photoUrls.Select(async photoUrl =>
+      {
+        var imageId = GenerateGuidFromSeed(photoUrl).ToString();
+        var imageData = await TryDownloadImage(photoUrl);
+
+        if (imageData != null)
+        {
+          await blobHelper.SaveToBlobStorage(imageData, imageId);
+
+          var propertyImage = new PropertyImage
+          {
+            PropertyId = property.Id,
+            ImageId = imageId,
+            Active = true,
+            CreateDate = DateTime.UtcNow,
+            LastUpdateDate = DateTime.UtcNow
+          };
+
+          propertyImages.Add(propertyImage);
+        }
+
+        imageIds.Add(imageId);
+      });
+
+      await Task.WhenAll(tasks);
+
+      foreach (var propertyImage in propertyImages)
+      {
+        await context.PropertyImage.AddAsync(propertyImage);
+      }
+
+      await context.SaveChangesAsync();
+
+      return imageIds;
+    }
+    catch
+    {
+      return null;
+    }
+  }
+
+  private static async Task<byte[]?> TryDownloadImage(string? imageUrl)
+  {
+    try
+    {
+      if (string.IsNullOrWhiteSpace(imageUrl))
+      {
+        return null;
+      }
+      using var client = new HttpClient();
+      var imageData = await client.GetByteArrayAsync(imageUrl);
+      return imageData;
+    }
+    catch 
+    {
+      return null;
+    }
+  }
+
+  private static Guid GenerateGuidFromSeed(string? seed)
+  {
+    if (string.IsNullOrWhiteSpace(seed))
+    {
+      return Guid.Empty;
+    }
+    using var sha256 = SHA256.Create();
+    var namespacedSeed = $"Nextplace-RapidAPI-{seed}";
+
+    var seedBytes = Encoding.UTF8.GetBytes(namespacedSeed);
+    var hashBytes = sha256.ComputeHash(seedBytes);
+
+    var guidBytes = new byte[16];
+    Array.Copy(hashBytes, guidBytes, 16);
+
+    return new Guid(guidBytes);
+  }
+
+  private static List<string>? GetFullScreenPhotoUrls(string json)
+  {
+    var fullScreenPhotoUrls = new List<string>();
+
+    dynamic jsonObject = JsonConvert.DeserializeObject(json)!;
+
+    if (jsonObject.data == null)
+    {
+      return null;
+    }
+    
+    foreach (var dataItem in jsonObject.data)
+    {
+      string url = dataItem.photoUrls.fullScreenPhotoUrl;
+      fullScreenPhotoUrls.Add(url);
+    }
+
+    return fullScreenPhotoUrls;
   }
 
   [HttpGet("Cities/Trending", Name = "GetTrendingCities")]
@@ -915,8 +1056,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         Predictions = []
       };
 
-      var propertySalePrice = data.SalePrice ?? 0;
-
       var e = data.EstimateStats!.MaxBy(e => e.CreateDate);
       if (e != null)
       {
@@ -933,12 +1072,13 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
               prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
               prediction.PredictedSaleDate);
 
-          var priceDiff = Math.Abs(propertySalePrice - tgp.PredictedSalePrice);
+          var incentive = prediction.Miner.Incentive;
 
-          predictions.Add(new Tuple<PropertyPrediction, double>(tgp, priceDiff));
+          predictions.Add(new Tuple<PropertyPrediction, double>(tgp, incentive));
         }
 
-        var returnedPredictions = predictions.OrderBy(p => p.Item2).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
+        var returnedPredictions = 
+          predictions.OrderByDescending(p => p.Item2).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
 
         property.Predictions.AddRange(returnedPredictions);
       }

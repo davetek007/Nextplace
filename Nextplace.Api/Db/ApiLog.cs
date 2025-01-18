@@ -23,4 +23,7 @@ public sealed class ApiLog : EntityTableData
 
     [MaxLength(450)]
     public required string ExecutionInstanceId { get; init; }
+
+    [MaxLength(450)]
+    public string? IpAddress { get; init; }
 }

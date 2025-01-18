@@ -67,4 +67,7 @@ public sealed class Property : EntityTableData
 
     // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<PropertyEstimateStats>? EstimateStats { get; init; }
+
+    // ReSharper disable once CollectionNeverUpdated.Global
+    public ICollection<PropertyImage>? Images { get; init; }
 }
