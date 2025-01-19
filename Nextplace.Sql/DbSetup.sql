@@ -359,3 +359,25 @@ as
 
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyEstimateStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
+go
+
+create procedure [dbo].DeDuplicatePropertyPredictions (@executionInstanceId nvarchar(450))
+as
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('DeDuplicatePropertyPredictions', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
+
+	delete		p1
+	from		dbo.PropertyPrediction p1, (
+		select		minerId, propertyId, max(id) as id 
+		from		dbo.PropertyPrediction 
+		where		active = 0x1
+		group by	minerId,propertyId 
+		having		count(1) > 1) as p2
+	where		p1.minerId = p2.minerId
+	and			p1.propertyId = p2.propertyId
+	and			p1.id < p2.id
+	and			p1.active = 0x1
+
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('DeDuplicatePropertyPredictions', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
+go

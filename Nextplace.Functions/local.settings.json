@@ -11,6 +11,7 @@
     "CalculatePropertyEstimateStatsTimerSchedule": "0 0 * * * *",
     "SyncValidatorStatusTimerSchedule": "* * * * * *",
     "UserKeyManagementTimerSchedule": "0 */1 * * * *",
+    "DeDuplicatePropertyPredictionsTimerSchedule": "0 */1 * * * *",
     "RetryCount": 6
   }
 }
