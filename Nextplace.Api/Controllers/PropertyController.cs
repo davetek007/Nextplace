@@ -1056,6 +1056,9 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         Predictions = []
       };
 
+      var propertySalePrice = data.SalePrice ?? 0;
+
+
       var e = data.EstimateStats!.MaxBy(e => e.CreateDate);
       if (e != null)
       {
@@ -1065,7 +1068,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
       if (data.Predictions != null)
       {
-        var predictions = new List<Tuple<PropertyPrediction, double>>();
+        var predictions = new List<Tuple<PropertyPrediction, double, double>>();
         foreach (var prediction in data.Predictions.Where(p => p.Active))
         {
           var tgp = new PropertyPrediction(prediction.Miner.HotKey,
@@ -1073,12 +1076,21 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
               prediction.PredictedSaleDate);
 
           var incentive = prediction.Miner.Incentive;
+          var priceDiff = Math.Abs(propertySalePrice - tgp.PredictedSalePrice);
 
-          predictions.Add(new Tuple<PropertyPrediction, double>(tgp, incentive));
+          predictions.Add(new Tuple<PropertyPrediction, double, double>(tgp, incentive, priceDiff));
         }
 
-        var returnedPredictions = 
-          predictions.OrderByDescending(p => p.Item2).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
+        List<PropertyPrediction> returnedPredictions;
+
+        if (filter.RankMethod == "Incentive")
+        {
+          returnedPredictions = predictions.OrderByDescending(p => p.Item2).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
+        }
+        else // if (filter.RankMethod == "PredictedSalePrice")
+        {
+          returnedPredictions = predictions.OrderByDescending(p => p.Item3).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
+        }
 
         property.Predictions.AddRange(returnedPredictions);
       }
