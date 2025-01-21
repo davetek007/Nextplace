@@ -1089,7 +1089,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         }
         else // if (filter.RankMethod == "PredictedSalePrice")
         {
-          returnedPredictions = predictions.OrderByDescending(p => p.Item3).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
+          returnedPredictions = predictions.OrderBy(p => p.Item3).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
         }
 
         property.Predictions.AddRange(returnedPredictions);

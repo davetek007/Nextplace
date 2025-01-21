@@ -307,7 +307,8 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
         return BadRequest("Password is not valid");
       }
 
-      var user = await context.User.FirstOrDefaultAsync(u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Validated");
+      var user = await context.User.Include(u => u.UserFavorites).Include(u => u.UserSettings)
+        .FirstOrDefaultAsync(u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Validated");
       if (user == null)
       {
         await context.SaveLogEntry("ResetPassword", $"Email address {request.EmailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
