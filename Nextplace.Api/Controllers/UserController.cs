@@ -210,7 +210,7 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
 
       await context.SaveLogEntry("ValidateUser", "Completed", "Information", executionInstanceId, clientIp);
 
-      return Ok(ConvertDbUserToModel(user));
+      return Ok(await ConvertDbUserToModel(user));
     }
     catch (Exception ex)
     {
@@ -345,7 +345,7 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
 
       await context.SaveLogEntry("ResetPassword", "Completed", "Information", executionInstanceId, clientIp);
 
-      return Ok(ConvertDbUserToModel(user));
+      return Ok(await  ConvertDbUserToModel(user));
     }
     catch (Exception ex)
     {
@@ -474,7 +474,7 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
 
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
 
-      return Ok(ConvertDbUserToModel(user));
+      return Ok(await ConvertDbUserToModel(user));
     }
     catch (Exception ex)
     {
@@ -532,7 +532,7 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
 
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
 
-      return Ok(ConvertDbUserToModel(user));
+      return Ok(await ConvertDbUserToModel(user));
     }
     catch (Exception ex)
     {
@@ -941,7 +941,7 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
     return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
   }
 
-  private static Models.User ConvertDbUserToModel(Db.User user)
+  private async Task<Models.User> ConvertDbUserToModel(Db.User user)
   {
     var userSettings = (from userSetting in user.UserSettings!
       where userSetting.Active
@@ -953,6 +953,24 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
 
     var u = new Models.User(user.Id, user.EmailAddress, userFavorites, userSettings);
 
+    if (userFavorites.Count != 0)
+    {
+      var nextplaceIds = userFavorites.Select(u1 => u1.NextplaceId).ToList();
+      var query = context.Property
+        .Include(tg => tg.Predictions)!.ThenInclude(p => p.Miner)
+        .Include(tg => tg.EstimateStats)
+        .AsQueryable();
+      
+      query = query.Where(p => nextplaceIds.Contains(p.NextplaceId));
+      var properties = await PropertyController.GetProperties(query, new PropertyFilter());
+
+      
+      foreach (var userFavorite in userFavorites)
+      {
+        userFavorite.Property = properties.FirstOrDefault(p => p.NextplaceId == userFavorite.NextplaceId);
+      }
+    } 
+    
     return u;
   }
 }

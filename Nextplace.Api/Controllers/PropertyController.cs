@@ -1016,7 +1016,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     };
   }
 
-  private static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query, PropertyFilter filter)
+  internal static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query, PropertyFilter filter)
   {
     var properties = new List<Property>();
 
