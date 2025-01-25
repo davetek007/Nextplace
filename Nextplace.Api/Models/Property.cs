@@ -108,4 +108,6 @@ public class Property(
   public List<PropertyPrediction> Predictions { get; set; } = null!;
 
   public PropertyEstimateStats? EstimateStats { get; set; } = null!;
+
+  public PropertyPredictionStats? PredictionStats { get; set; } = null!;
 }

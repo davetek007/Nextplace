@@ -12,6 +12,7 @@ using Microsoft.Extensions.Caching.Memory;
 using PropertyValuation = Nextplace.Api.Db.PropertyValuation;
 using Nextplace.Api.Helpers;
 using System.Text;
+using PropertyPredictionStats = Nextplace.Api.Models.PropertyPredictionStats;
 
 namespace Nextplace.Api.Controllers;
 
@@ -92,7 +93,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
     try
     {
-      const int resultCount = 100000;
+      const int resultCountPerMarket = 500;
       if (!HttpContext.CheckRateLimit(cache, config, "GetTrainingData", out var offendingIpAddress))
       {
         await context.SaveLogEntry("GetTrainingData", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
@@ -110,12 +111,21 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       }
       else
       {
-        var results = await context.Property
+        List<PropertyContext> allProperties = [];
+        var markets = await context.Market.Select(m => m.Name).ToListAsync();
+
+        foreach (var market in markets)
+        { 
+          var propertiesForMarket = await context.Property
+            .Where(p => p.Market == market)
             .OrderByDescending(p => p.LastUpdateDate)
-            .Take(resultCount).ToListAsync();
+            .Take(resultCountPerMarket)
+            .ToListAsync();
 
+          allProperties.AddRange(propertiesForMarket);
+        }
 
-        properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
+        properties = allProperties.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
                     data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
                     data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
                     data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
@@ -533,6 +543,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
   [SwaggerOperation("Search for properties")]
   public async Task<ActionResult<List<Property>>> Search([FromQuery] PropertyFilter filter)
   {
+    filter.TopPredictionCount = Math.Clamp(filter.TopPredictionCount, 0, 10);
     var executionInstanceId = Guid.NewGuid().ToString();
 
     try
@@ -549,8 +560,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
 
       var query = context.Property
-          .Include(tg => tg.Predictions)!.ThenInclude(p => p.Miner)
-          .Include(tg => tg.EstimateStats)
+        .Include(tg => tg.EstimateStats)
+        .Include(tg => tg.PredictionStats)
           .AsQueryable();
 
       query = ApplyDateFilters(query, filter);
@@ -558,8 +569,8 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       query = ApplyMarketFilter(query, filter);
       query = ApplyCoordinateFilters(query, filter);
       query = ApplyAwaitingResultFilter(query, filter);
-      query = ApplyMinPredictionsFilter(query, filter);
       query = ApplySortOrder(query, filter.SortOrder);
+      query = ApplyMinPredictionsFilter(query, filter);
 
       var totalCount = await query.CountAsync();
       Response.Headers.Append("Nextplace-Search-Total-Count", totalCount.ToString());
@@ -900,19 +911,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     }
   }
 
-  private static IQueryable<PropertyContext> ApplyMinPredictionsFilter(IQueryable<PropertyContext> query, PropertyFilter filter)
-  {
-    if (filter.MinPredictions.HasValue)
-    {
-      var minPredictions = Math.Clamp(filter.MinPredictions.Value, 0, 50);
-
-      query = query.Where(tg =>
-          tg.Predictions!.Count(p => p.Active) >= minPredictions);
-    }
-
-    return query;
-  }
-
   private static IQueryable<PropertyContext> ApplyDateFilters(IQueryable<PropertyContext> query, PropertyFilter filter)
   {
     if (filter.ListingStartDate.HasValue)
@@ -1016,6 +1014,20 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     };
   }
 
+  private static IQueryable<PropertyContext> ApplyMinPredictionsFilter(IQueryable<PropertyContext> query, PropertyFilter filter)
+  {
+    if (filter.MinPredictions.HasValue)
+    {
+      var minPredictions = Math.Clamp(filter.MinPredictions.Value, 0, 50);
+
+      query = query.Where(tg =>
+        tg.PredictionStats!.Any() && tg.PredictionStats!.First().NumPredictions >= minPredictions);
+    }
+
+    return query;
+  }
+
+
   internal static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query, PropertyFilter filter)
   {
     var properties = new List<Property>();
@@ -1055,10 +1067,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       {
         Predictions = []
       };
-
-      var propertySalePrice = data.SalePrice ?? 0;
-
-
+      
       var e = data.EstimateStats!.MaxBy(e => e.CreateDate);
       if (e != null)
       {
@@ -1066,33 +1075,36 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
             e.MinEstimate, e.MaxEstimate, e.ClosestEstimate, e.FirstEstimateAmount, e.LastEstimateAmount);
       }
 
-      if (data.Predictions != null)
+      property.Predictions = [];
+
+      var pps = data.PredictionStats!.FirstOrDefault();
+      
+      if (pps != null)
       {
-        var predictions = new List<Tuple<PropertyPrediction, double, double>>();
-        foreach (var prediction in data.Predictions.Where(p => p.Active))
+        var json = pps.Top10Predictions;
+        var predictionEntries = JsonConvert.DeserializeObject<List<dynamic>>(json);
+
+        if (predictionEntries != null)
         {
-          var tgp = new PropertyPrediction(prediction.Miner.HotKey,
-              prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
-              prediction.PredictedSaleDate);
-
-          var incentive = prediction.Miner.Incentive;
-          var priceDiff = Math.Abs(propertySalePrice - tgp.PredictedSalePrice);
-
-          predictions.Add(new Tuple<PropertyPrediction, double, double>(tgp, incentive, priceDiff));
+          for (var i = 0; i < predictionEntries.Count; i++)
+          {
+            if (i > filter.TopPredictionCount)
+            {
+              break;
+            }
+            
+            var entry = predictionEntries[i];
+            property.Predictions.Add(new PropertyPrediction(
+              minerHotKey: (string)entry.hotKey,
+              minerColdKey: (string)entry.coldKey,
+              predictionDate: (DateTime)entry.predictionDate,
+              predictedSalePrice: (double)entry.predictedSalePrice,
+              predictedSaleDate: (DateTime)entry.predictedSaleDate));
+          }
         }
 
-        List<PropertyPrediction> returnedPredictions;
-
-        if (filter.RankMethod == "Incentive")
-        {
-          returnedPredictions = predictions.OrderByDescending(p => p.Item2).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
-        }
-        else // if (filter.RankMethod == "PredictedSalePrice")
-        {
-          returnedPredictions = predictions.OrderBy(p => p.Item3).Take(filter.TopPredictionCount).Select(p => p.Item1).ToList();
-        }
-
-        property.Predictions.AddRange(returnedPredictions);
+        property.PredictionStats = new PropertyPredictionStats(pps.NumPredictions, pps.AvgPredictedSalePrice,
+          pps.MinPredictedSalePrice, pps.MaxPredictedSalePrice);
       }
 
       properties.Add(property);

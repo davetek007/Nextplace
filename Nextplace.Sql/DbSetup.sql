@@ -216,6 +216,19 @@ create table dbo.PropertyEstimateStats (
 	active bit not null)
 go
 
+create table dbo.PropertyPredictionStats (
+	id bigint identity (1,1) primary key not null, 
+	propertyId bigint foreign key references dbo.Property (id) not null,
+	numPredictions int not null,
+	avgPredictedSalePrice float(53) not null,
+	minPredictedSalePrice float(53) not null,
+	maxPredictedSalePrice float(53) not null,
+	top10Predictions nvarchar(max) not null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go
+
 create table dbo.ApiLog (
 	id bigint identity (1,1) primary key not null,
 	apiName nvarchar(450) not null,	
@@ -381,3 +394,100 @@ as
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('DeDuplicatePropertyPredictions', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
 go
+
+create procedure [dbo].[CalculatePropertyPredictionStats] (@executionInstanceId nvarchar(450))
+as
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
+
+	select		p.id as propertyId, pp.id as propertyPredictionId, minerId, p.saleDate, p.salePrice, pp.predictedSaleDate, pp.predictedSalePrice, pp.predictionDate
+	into		#t1
+	from		dbo.Property p
+	inner join	dbo.PropertyPrediction pp on pp.propertyId = p.id and pp.active = 0x1
+	where		p.active = 0x1
+	and			( p.lastUpdateDate > dateadd(dd, -1, getutcdate()) or pp.createDate > dateadd(dd, -1, getutcdate()))
+			
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Predictions selected', 'Information', getutcdate(), @executionInstanceId)
+
+	delete		t1
+	from		#t1 t1, (
+		select		propertyId, max(propertyPredictionId) as propertyPredictionId, minerId, count(1) as count
+		from		#t1
+		group by	propertyId, minerId
+		having		count(1) > 1) as t2
+	where		t1.propertyId = t2.propertyId
+	and			t1.minerId = t2.minerId
+	and			t1.propertyPredictionId < t2.propertyPredictionId
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Predictions deduplicated', 'Information', getutcdate(), @executionInstanceId);
+
+	with rankedPredictions as (
+		select	p.propertyId, p.saleDate, p.salePrice, p.predictedSaleDate, p.predictedSalePrice, p.predictionDate, m.id as minerId, 
+		row_number() over (
+			partition by p.propertyId
+			order by
+				case when p.salePrice is not null then abs(p.predictedSalePrice - p.salePrice) else null end asc,
+				case when p.salePrice is null then m.incentive else null end desc) as ranking
+		from #t1 p, dbo.Miner m where p.minerId = m.id)	
+	select		*
+	into		#t2
+	from		rankedPredictions
+	where		ranking <= 10
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Ranked predictions selected', 'Information', getutcdate(), @executionInstanceId)
+		
+	select		propertyId, 
+				count(1) as numPredictions, 
+				avg(predictedSalePrice) as avgPredictedSalePrice,
+				min(predictedSalePrice) as minPredictedSalePrice,
+				max(predictedSalePrice) as maxPredictedSalePrice
+	into		#t3
+	from		#t1 
+	group by	propertyId
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Stats calculated', 'Information', getutcdate(), @executionInstanceId)
+		  
+	select		propertyId,
+				json_query ((
+					select	hotKey, coldKey, 
+							cast (predictedSalePrice as decimal(18, 2)) as predictedSalePrice, 
+							predictedSaleDate,
+							predictionDate
+					from	#t2 as sub, dbo.Miner m
+					where	sub.propertyId = t.propertyId
+					and		sub.minerId = m.id
+					for json path)) as top10Predictions
+	into		#t4
+	from (select distinct propertyId from #t2) t;
+
+	alter table	#t3 add top10Predictions nvarchar(max)
+
+	update		p
+	set			p.top10Predictions = t.top10Predictions
+	from		#t3 p, #t4 t
+	where		p.propertyId = t.propertyId
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Ranked predictions json calculated', 'Information', getutcdate(), @executionInstanceId)
+	
+	delete		s
+	from		dbo.PropertyPredictionStats s
+	where		s.propertyId in (select propertyId from #t3)
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Old entries deleted', 'Information', getutcdate(), @executionInstanceId)
+
+	insert		dbo.PropertyPredictionStats (propertyId, numPredictions, avgPredictedSalePrice, minPredictedSalePrice, maxPredictedSalePrice, top10Predictions, createDate, lastUpdateDate, active)
+	select		propertyId, numPredictions, avgPredictedSalePrice, minPredictedSalePrice, maxPredictedSalePrice, top10Predictions, getutcdate(), getutcdate(), 0x1
+	from		#t3
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'New entries added', 'Information', getutcdate(), @executionInstanceId)
+
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
+ go

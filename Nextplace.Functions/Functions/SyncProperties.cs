@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -53,87 +54,133 @@ public sealed class SyncProperties(ILoggerFactory loggerFactory, IConfiguration 
   {
     bool moreData;
     var page = 0;
+    var retryCount = 0;
+    const int maxRetries = 15;
+    
+    do
+    {
+      try
+      {
+        (page, moreData) = await SyncSoldPropertiesPaged(market, executionInstanceId, hashKey, page);
+      }
+      catch (HttpRequestException ex) when (ex.Message.Contains("429"))
+      {
+        retryCount++;
+
+        if (retryCount > maxRetries)
+        {
+          throw;
+        }
+
+        var delay = GetExponentialBackoffDelay(retryCount);
+
+        await context.SaveLogEntry("SyncProperties", $"SyncSoldProperties - 429 error returned for market '{market}' on page '{page}'. Applying a delay of {delay.TotalSeconds} seconds",
+          "Warning", executionInstanceId);
+        
+        await Task.Delay(delay);
+        moreData = true;
+      }
+    }
+    while (moreData);
+  }
+
+  private async Task SyncPropertiesForSale(Market market, string executionInstanceId, byte[] hashKey)
+  {
+    bool moreData;
+    var page = 0;
+    var retryCount = 0;
+    const int maxRetries = 15;
 
     do
     {
-      string apiUrl;
-      if (market.Country == "Canada")
+      try
       {
-        apiUrl =
-          $"{configuration["RedfinCanadaSoldPropertiesApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}";
+        (page, moreData) = await SyncPropertiesForSalePaged(market, executionInstanceId, hashKey, page);
       }
-      else
+      catch (HttpRequestException ex) when (ex.Message.Contains("429"))
       {
-        apiUrl =
-          $"{configuration["RedfinSoldPropertiesApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}";
-      }
+        retryCount++;
 
-      var apiKey = await new AkvHelper(configuration).GetSecretAsync("RedfinApiKey");
-
-      var httpClient = new HttpClient();
-
-      if (market.Country == "Canada")
-      {
-        httpClient.DefaultRequestHeaders.Add("x-rapidapi-host", configuration["RedfinCanadaApiHost"]);
-      }
-      else
-      {
-        httpClient.DefaultRequestHeaders.Add("x-rapidapi-host", configuration["RedfinApiHost"]);
-      }
-
-      httpClient.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
-
-      var response = await httpClient.GetAsync(apiUrl);
-      var json = await response.Content.ReadAsStringAsync();
-      response.EnsureSuccessStatusCode();
-
-      var rootObject = JsonConvert.DeserializeObject<PropertyListing>(json)!;
-
-      if (rootObject.Data != null && rootObject.Data.Count != 0)
-      {
-        await context.SaveLogEntry("SyncProperties", $"Found {rootObject.Data.Count} properties on page {page}", "Information", executionInstanceId);
-        foreach (var homeData in rootObject.Data.Select(d => d.HomeData))
+        if (retryCount > maxRetries)
         {
-          if (!long.TryParse(homeData.ListingId, out var listingId) || !long.TryParse(homeData.PropertyId, out var propertyId))
-          {
-            continue;
-          }
-
-          var property = await context.Property.FirstOrDefaultAsync(p => p.ListingId == listingId && p.PropertyId == propertyId);
-
-          if (property == null)
-          {
-            InsertProperty(listingId, propertyId, homeData, market, hashKey);
-            continue;
-          }
-
-          var saleDate = homeData.LastSaleData?.LastSoldDate ?? null;
-
-          if (saleDate == null || saleDate < property.ListingDate)
-          {
-            continue;
-          }
-
-          var salePrice = homeData.PriceInfo.Amount;
-
-          property.SaleDate = saleDate;
-          property.SalePrice = salePrice;
-
-
-          property.LastUpdateDate = DateTime.UtcNow;
+          throw;
         }
 
-        await context.SaveChangesAsync();
+        var delay = GetExponentialBackoffDelay(retryCount);
+
+        await context.SaveLogEntry("SyncProperties", $"SyncPropertiesForSale - 429 error returned for market '{market}' on page '{page}'. Applying a delay of {delay.TotalSeconds} seconds",
+          "Warning", executionInstanceId);
+
+        await Task.Delay(delay);
+        moreData = true;
       }
-      else
+    }
+    while (moreData);
+  }
+
+  private async Task<(int page, bool moreData)> SyncSoldPropertiesPaged(Market market, string executionInstanceId, byte[] hashKey, int page)
+  {
+    var apiUrl = market.Country == "Canada" ? $"{configuration["RedfinCanadaSoldPropertiesApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}" : $"{configuration["RedfinSoldPropertiesApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}";
+
+    var apiKey = await new AkvHelper(configuration).GetSecretAsync("RedfinApiKey");
+
+    var httpClient = new HttpClient();
+
+    httpClient.DefaultRequestHeaders.Add("x-rapidapi-host",
+      market.Country == "Canada" ? configuration["RedfinCanadaApiHost"] : configuration["RedfinApiHost"]);
+
+    httpClient.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
+
+    var response = await httpClient.GetAsync(apiUrl);
+    var json = await response.Content.ReadAsStringAsync();
+    response.EnsureSuccessStatusCode();
+
+    var rootObject = JsonConvert.DeserializeObject<PropertyListing>(json)!;
+
+    if (rootObject.Data != null && rootObject.Data.Count != 0)
+    {
+      await context.SaveLogEntry("SyncProperties", $"Found {rootObject.Data.Count} properties on page {page}", "Information", executionInstanceId);
+      foreach (var homeData in rootObject.Data.Select(d => d.HomeData))
       {
-        await context.SaveLogEntry("SyncProperties", $"No properties found on page {page}", "Information", executionInstanceId);
+        if (!long.TryParse(homeData.ListingId, out var listingId) || !long.TryParse(homeData.PropertyId, out var propertyId))
+        {
+          continue;
+        }
+
+        var property = await context.Property.FirstOrDefaultAsync(p => p.ListingId == listingId && p.PropertyId == propertyId);
+
+        if (property == null)
+        {
+          InsertProperty(listingId, propertyId, homeData, market, hashKey);
+          continue;
+        }
+
+        var saleDate = homeData.LastSaleData?.LastSoldDate ?? null;
+
+        if (saleDate == null || saleDate < property.ListingDate)
+        {
+          continue;
+        }
+
+        var salePrice = homeData.PriceInfo.Amount;
+
+        property.SaleDate = saleDate;
+        property.SalePrice = salePrice;
+
+
+        property.LastUpdateDate = DateTime.UtcNow;
       }
 
       await context.SaveChangesAsync();
-      moreData = rootObject.Meta.MoreData;
     }
-    while (moreData);
+    else
+    {
+      await context.SaveLogEntry("SyncProperties", $"No properties found on page {page}", "Information", executionInstanceId);
+    }
+
+    await context.SaveChangesAsync();
+    var moreData = rootObject.Meta.MoreData;
+    return (page, moreData);
   }
 
   private void InsertProperty(long listingId, long propertyId, HomeData homeData, Market market, byte[] hashKey)
@@ -190,71 +237,49 @@ public sealed class SyncProperties(ILoggerFactory loggerFactory, IConfiguration 
     context.Property.Add(property);
   }
 
-  private async Task SyncPropertiesForSale(Market market, string executionInstanceId, byte[] hashKey)
+  private async Task<(int page, bool moreData)> SyncPropertiesForSalePaged(Market market, string executionInstanceId, byte[] hashKey, int page)
   {
-    bool moreData;
-    var page = 0;
+    var apiUrl = market.Country == "Canada" ? $"{configuration["RedfinCanadaPropertiesForSaleApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}" : $"{configuration["RedfinPropertiesForSaleApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}"; 
+    var apiKey = await new AkvHelper(configuration).GetSecretAsync("RedfinApiKey");
 
-    do
+    var httpClient = new HttpClient();
+
+    httpClient.DefaultRequestHeaders.Add("x-rapidapi-host",
+      market.Country == "Canada" ? configuration["RedfinCanadaApiHost"] : configuration["RedfinApiHost"]);
+    httpClient.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
+
+    var response = await httpClient.GetAsync(apiUrl);
+    var json = await response.Content.ReadAsStringAsync();
+    response.EnsureSuccessStatusCode();
+
+    var rootObject = JsonConvert.DeserializeObject<PropertyListing>(json)!;
+
+    if (rootObject.Data != null && rootObject.Data.Count != 0)
     {
-      string apiUrl;
-      if (market.Country == "Canada")
+      await context.SaveLogEntry("SyncProperties", $"Found {rootObject.Data.Count} properties on page {page}", "Information", executionInstanceId);
+      foreach (var homeData in rootObject.Data.Select(d => d.HomeData))
       {
-        apiUrl =
-          $"{configuration["RedfinCanadaPropertiesForSaleApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}";
-      }
-      else
-      {
-        apiUrl =
-          $"{configuration["RedfinPropertiesForSaleApiUrl"]!}?limit=350&soldWithin=31&regionId={market.ExternalId}&page={++page}";
-      } 
-      var apiKey = await new AkvHelper(configuration).GetSecretAsync("RedfinApiKey");
-
-      var httpClient = new HttpClient();
-
-      if (market.Country == "Canada")
-      {
-        httpClient.DefaultRequestHeaders.Add("x-rapidapi-host", configuration["RedfinCanadaApiHost"]);
-      }
-      else
-      {
-        httpClient.DefaultRequestHeaders.Add("x-rapidapi-host", configuration["RedfinApiHost"]);
-      }
-      httpClient.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
-
-      var response = await httpClient.GetAsync(apiUrl);
-      var json = await response.Content.ReadAsStringAsync();
-      response.EnsureSuccessStatusCode();
-
-      var rootObject = JsonConvert.DeserializeObject<PropertyListing>(json)!;
-
-      if (rootObject.Data != null && rootObject.Data.Count != 0)
-      {
-        await context.SaveLogEntry("SyncProperties", $"Found {rootObject.Data.Count} properties on page {page}", "Information", executionInstanceId);
-        foreach (var homeData in rootObject.Data.Select(d => d.HomeData))
+        if (!long.TryParse(homeData.ListingId, out var listingId) || !long.TryParse(homeData.PropertyId, out var propertyId))
         {
-          if (!long.TryParse(homeData.ListingId, out var listingId) || !long.TryParse(homeData.PropertyId, out var propertyId))
-          {
-            continue;
-          }
-
-          if (await context.Property.AnyAsync(p => p.ListingId == listingId && p.PropertyId == propertyId))
-          {
-            continue;
-          }
-
-          InsertProperty(listingId, propertyId, homeData, market, hashKey);
+          continue;
         }
-      }
-      else
-      {
-        await context.SaveLogEntry("SyncProperties", $"No properties found on page {page}", "Information", executionInstanceId);
-      }
 
-      await context.SaveChangesAsync();
-      moreData = rootObject.Meta.MoreData;
+        if (await context.Property.AnyAsync(p => p.ListingId == listingId && p.PropertyId == propertyId))
+        {
+          continue;
+        }
+
+        InsertProperty(listingId, propertyId, homeData, market, hashKey);
+      }
     }
-    while (moreData);
+    else
+    {
+      await context.SaveLogEntry("SyncProperties", $"No properties found on page {page}", "Information", executionInstanceId);
+    }
+
+    await context.SaveChangesAsync();
+    var moreData = rootObject.Meta.MoreData;
+    return (page, moreData);
   }
 
   private static string GetHash(byte[] hashKey, string? address, string? zip)
@@ -264,5 +289,13 @@ public sealed class SyncProperties(ILoggerFactory loggerFactory, IConfiguration 
     var messageBytes = Encoding.UTF8.GetBytes($"{address ?? string.Empty}-{zip ?? string.Empty}");
     var hashBytes = hmac.ComputeHash(messageBytes);
     return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+  }
+
+  private static TimeSpan GetExponentialBackoffDelay(int retryCount)
+  {
+    var random = new Random();
+    var baseDelay = Math.Pow(2, retryCount); 
+    var jitter = random.NextDouble();
+    return TimeSpan.FromSeconds(baseDelay + jitter);
   }
 }

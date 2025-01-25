@@ -10,8 +10,6 @@ public class PropertyFilter
 
   public int? MinPredictions { get; set; } = 0;
 
-  public string RankMethod { get; set; } = "Incentive";
-
   public string SortOrder { get; set; } = string.Empty;
 
   public DateTime? ListingStartDate { get; set; } = null;

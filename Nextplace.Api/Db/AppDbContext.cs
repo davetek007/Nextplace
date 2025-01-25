@@ -6,6 +6,8 @@ namespace Nextplace.Api.Db;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
   public DbSet<Miner> Miner => Set<Miner>();
+  
+  public DbSet<Market> Market => Set<Market>();
 
   public DbSet<MinerDatedScore> MinerDatedScore => Set<MinerDatedScore>();
 
@@ -18,6 +20,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
   public DbSet<PropertyImage> PropertyImage => Set<PropertyImage>();
 
   public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
+
+  public DbSet<PropertyPredictionStats> PropertyPredictionStats => Set<PropertyPredictionStats>();
 
   public DbSet<ApiLog> ApiLog => Set<ApiLog>();
 
@@ -38,6 +42,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
       .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
     
+    modelBuilder.Entity<PropertyPredictionStats>().HasOne(tgp => tgp.Property).WithMany(m => m.PredictionStats)
+      .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
     modelBuilder.Entity<PropertyImage>().HasOne(tgp => tgp.Property).WithMany(m => m.Images)
       .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
