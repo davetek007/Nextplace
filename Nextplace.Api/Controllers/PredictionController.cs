@@ -7,6 +7,7 @@ using Miner = Nextplace.Api.Db.Miner;
 using PropertyPrediction = Nextplace.Api.Db.PropertyPrediction;
 using Microsoft.Extensions.Caching.Memory;
 using Swashbuckle.AspNetCore.Annotations;
+using Validator = Nextplace.Api.Db.Validator;
 
 namespace Nextplace.Api.Controllers;
 
@@ -30,21 +31,21 @@ public class PredictionController(AppDbContext context, IConfiguration configura
       }
 
       await context.SaveLogEntry("PostPredictions", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("PostPredictions", "Predictions: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+      //await context.SaveLogEntry("PostPredictions", "Predictions: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
 
       var ipAddressList = HttpContext.GetIpAddressesFromHeader(out var ipAddressLog);
 
-      var validators = await context.Validator.Where(w => w.Active == true).ToListAsync();
+      var validators = await GetValidators();
       var matchingValidator = validators.FirstOrDefault(v => ipAddressList.Contains(v.IpAddress));
-
-      await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
-
-      if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList))
+      
+      if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList, out var whitelistOnly))
       {
+        await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
         await context.SaveLogEntry("PostPredictions", "IP address whitelisted", "Information", executionInstanceId);
       }
       else if (matchingValidator == null)
       {
+        await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
         await context.SaveLogEntry("PostPredictions", "IP address not allowed", "Warning", executionInstanceId);
         await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
 
@@ -52,6 +53,13 @@ public class PredictionController(AppDbContext context, IConfiguration configura
       }
       else
       {
+        if (whitelistOnly)
+        {
+          await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
+          return CreatedAtAction(nameof(PostPredictions), null, null);
+        }
+
+        await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
         await context.SaveLogEntry("PostPredictions", $"IP address returned for validator {matchingValidator.HotKey} (ID: {matchingValidator.Id})", "Information", executionInstanceId);
       }
 
@@ -189,6 +197,21 @@ public class PredictionController(AppDbContext context, IConfiguration configura
       await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
       return StatusCode(500);
     }
+  }
+
+  private async Task<List<Validator>> GetValidators()
+  {
+    const string cacheKey= "Validators";
+
+    if (cache.TryGetValue(cacheKey, out var cachedData))
+    {
+      var data = (List<Validator>)cachedData!;
+      return data;
+    }
+
+    var validators = await context.Validator.Where(w => w.Active == true).ToListAsync();
+    cache.Set(cacheKey, validators, TimeSpan.FromDays(1));
+    return validators;
   }
 
   private async Task<long> GetMinerId(string hotKey, string coldKey, string executionInstanceId)

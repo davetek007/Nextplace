@@ -191,7 +191,7 @@ public class MinerController(AppDbContext context, IConfiguration configuration,
 
       await context.SaveLogEntry("PostMinerScores", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
 
-      if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList))
+      if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList, out _))
       {
         await context.SaveLogEntry("PostMinerScores", "IP address whitelisted", "Information", executionInstanceId);
       }

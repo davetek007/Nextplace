@@ -10,12 +10,14 @@ public static class HelperExtensions
     response.Headers.Append("access-control-allow-origin", "*");
     response.Headers.Append("access-control-expose-headers", "*");
   }
-  public static bool IsIpWhitelisted(IConfiguration configuration, List<string> ipAddresses)
+
+  public static bool IsIpWhitelisted(IConfiguration configuration, List<string> ipAddresses, out bool whitelistOnly)
   {
     var whitelist = configuration.GetSection("IpWhitelist").Get<string[]>();
 
+    whitelistOnly = configuration.GetSection("IpWhitelistOnly").Get<bool>();
     return whitelist != null && ipAddresses.Any(ip => whitelist.Any(whitelistedIp =>
-        string.Equals(whitelistedIp, ip, StringComparison.OrdinalIgnoreCase)));
+      string.Equals(whitelistedIp, ip, StringComparison.OrdinalIgnoreCase)));
   }
 
   public static List<string> GetIpAddressesFromHeader(this HttpContext context, out string logString)
