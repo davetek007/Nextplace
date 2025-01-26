@@ -22,7 +22,11 @@ var host = new HostBuilder()
         var connectionString = configuration.GetConnectionString("DefaultConnection")
                                ?? throw new ApplicationException("DefaultConnection is not set");
         
-        services.AddDbContextFactory<AppDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddDbContextFactory<AppDbContext>(
+          options => options.UseSqlServer(connectionString, sqlOptions =>
+          {
+            sqlOptions.EnableRetryOnFailure(5);
+          }));
 
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();

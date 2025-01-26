@@ -9,20 +9,20 @@ namespace Nextplace.Functions.Functions;
 
 public sealed class DeleteOldProperties(ILoggerFactory loggerFactory, AppDbContext context)
 {
-    private readonly ILogger _logger = loggerFactory.CreateLogger<CalculatePropertyPredictionStats>(); 
+    private readonly ILogger _logger = loggerFactory.CreateLogger<DeleteOldProperties>(); 
 
-    [Function("CalculatePropertyPredictionStats")]
-    public async Task Run([TimerTrigger("%CalculatePropertyPredictionStatsTimerSchedule%")] TimerInfo myTimer)
+    [Function("DeleteOldProperties")]
+    public async Task Run([TimerTrigger("%DeleteOldPropertiesTimerSchedule%")] TimerInfo myTimer)
     { 
         var executionInstanceId = Guid.NewGuid().ToString();
         
         try
         {
-            _logger.LogInformation($"CalculatePropertyPredictionStats executed at: {DateTime.UtcNow}");
-            await context.SaveLogEntry("CalculatePropertyPredictionStats", "Started", "Information", executionInstanceId);
+            _logger.LogInformation($"DeleteOldProperties executed at: {DateTime.UtcNow}");
+            await context.SaveLogEntry("DeleteOldProperties", "Started", "Information", executionInstanceId);
 
             await using var connection = context.Database.GetDbConnection() as SqlConnection;
-            await using var command = new SqlCommand("dbo.CalculatePropertyPredictionStats", connection);
+            await using var command = new SqlCommand("dbo.DeleteOldProperties", connection);
             
             command.CommandType = CommandType.StoredProcedure;
             command.CommandTimeout = 1800;
@@ -35,14 +35,14 @@ public sealed class DeleteOldProperties(ILoggerFactory loggerFactory, AppDbConte
             if (myTimer.ScheduleStatus is not null)
             {
                 _logger.LogInformation(
-                    $"Next timer for CalculatePropertyPredictionStats is schedule at: {myTimer.ScheduleStatus.Next}");
+                    $"Next timer for DeleteOldProperties is schedule at: {myTimer.ScheduleStatus.Next}");
             }
             
-            await context.SaveLogEntry("CalculatePropertyPredictionStats", "Completed", "Information", executionInstanceId);
+            await context.SaveLogEntry("DeleteOldProperties", "Completed", "Information", executionInstanceId);
         }
         catch (Exception ex)
         {
-            await context.SaveLogEntry("CalculatePropertyPredictionStats", ex, executionInstanceId);
+            await context.SaveLogEntry("DeleteOldProperties", ex, executionInstanceId);
         }
     }
 }
