@@ -117,7 +117,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
         foreach (var market in markets)
         { 
           var propertiesForMarket = await context.Property
-            .Where(p => p.Market == market)
+            .Where(p => p.Market == market && p.SalePrice != null)
             .OrderByDescending(p => p.LastUpdateDate)
             .Take(resultCountPerMarket)
             .ToListAsync();
@@ -471,7 +471,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       else
       {
         data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
-                && p.Predictions!.Count >=
+                && p.PredictionStats!.Any() && p.PredictionStats!.First().NumPredictions >=
                 minimumPredictionCount)
             .GroupBy(p => p.SaleDate!.Value.Date)
             .Select(g => new { SaleDate = g.Key, Count = g.Count() }).ToListAsync();
@@ -519,13 +519,15 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       else
       {
         data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
-                && p.Predictions!.Count >=
-                minimumPredictionCount)
-            .GroupBy(p => p.Market)
-            .Select(g => new { Market = g.Key, Count = g.Count() }).ToListAsync();
+                                                                         && p.PredictionStats!.Any() &&
+                                                                         p.PredictionStats!.First().NumPredictions >=
+                                                                         minimumPredictionCount)
+          .GroupBy(p => p.Market)
+          .Select(g => new { Market = g.Key, Count = g.Count() }).ToListAsync();
 
         cache.Set(cacheKey, data, TimeSpan.FromHours(12));
       }
+
       Response.AppendCorsHeaders();
 
 

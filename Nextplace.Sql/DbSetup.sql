@@ -491,3 +491,54 @@ as
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
  go
+
+ /****** Object:  StoredProcedure [dbo].[DeleteOldProperties]    Script Date: 26/01/2025 10:24:53 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[DeleteOldProperties]  (@executionInstanceId nvarchar(450))
+AS
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('DeleteOldProperties', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
+
+    DECLARE @RowCount INT;
+
+    WHILE 1 = 1
+    BEGIN
+        DECLARE @PropertyIdsToDelete TABLE (id BIGINT);
+
+        INSERT INTO @PropertyIdsToDelete (id)
+        SELECT TOP (1000) id
+        FROM dbo.Property
+        WHERE saleDate < DATEADD(dd, -31, getutcdate());
+
+        SET @RowCount = @@ROWCOUNT;
+
+        IF @RowCount = 0 BREAK;
+					
+		insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+		values		('DeleteOldProperties', 'Deleting batch of ' + cast (@rowCount as nvarchar (450)) + ' properties', 'Information', getutcdate(), @executionInstanceId)
+
+		DELETE FROM dbo.PropertyImage
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyEstimate
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyPrediction
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyEstimateStats
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyPredictionStats
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
+
+		DELETE FROM dbo.Property
+		WHERE id IN (SELECT id FROM @PropertyIdsToDelete);
+    end
+
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('DeleteOldProperties', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
+go
