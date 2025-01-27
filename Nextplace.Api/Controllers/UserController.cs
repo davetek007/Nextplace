@@ -957,13 +957,12 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
     {
       var nextplaceIds = userFavorites.Select(u1 => u1.NextplaceId).ToList();
       var query = context.Property
-        .Include(tg => tg.Predictions)!.ThenInclude(p => p.Miner)
+        .Include(tg => tg.PredictionStats) 
         .Include(tg => tg.EstimateStats)
         .AsQueryable();
       
       query = query.Where(p => nextplaceIds.Contains(p.NextplaceId));
       var properties = await PropertyController.GetProperties(query, new PropertyFilter());
-
       
       foreach (var userFavorite in userFavorites)
       {

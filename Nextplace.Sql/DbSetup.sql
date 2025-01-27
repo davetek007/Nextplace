@@ -491,13 +491,8 @@ as
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
  go
-
- /****** Object:  StoredProcedure [dbo].[DeleteOldProperties]    Script Date: 26/01/2025 10:24:53 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER PROCEDURE [dbo].[DeleteOldProperties]  (@executionInstanceId nvarchar(450))
+  
+create PROCEDURE [dbo].[DeleteOldProperties]  (@executionInstanceId nvarchar(450))
 AS
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('DeleteOldProperties', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
@@ -541,4 +536,15 @@ AS
 
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('DeleteOldProperties', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
+go
+create PROCEDURE [dbo].DeleteOldMinerStats  (@executionInstanceId nvarchar(450))
+AS
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('DeleteOldMinerStats', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
+ 
+	delete		dbo.MinerDatedScore where minerScoreId in (select id from dbo.MinerScore where active=0x0)
+	delete		dbo.MinerScore where active = 0x0 and id not in (select minerScoreId from dbo.MinerDatedScore)
+
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('DeleteOldMinerStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
 go

@@ -12,7 +12,7 @@
     "SyncValidatorStatusTimerSchedule": "* * * * * *",
     "UserKeyManagementTimerSchedule": "0 */1 * * * *",
     "CalculatePropertyPredictionStatsTimerSchedule": "0 0 * * * *",
-    "DeleteOldPropertiesTimerSchedule": "0 0 * * * *",
+    "PurgeOldDataTimerSchedule": "0 0 * * * *",
     "RetryCount": 6
   }
 }
