@@ -13,6 +13,11 @@ using PropertyValuation = Nextplace.Api.Db.PropertyValuation;
 using Nextplace.Api.Helpers;
 using System.Text;
 using PropertyPredictionStats = Nextplace.Api.Models.PropertyPredictionStats;
+using Azure.Identity;
+using Microsoft.Graph.Models.ExternalConnectors;
+using Microsoft.Graph.Models;
+using Microsoft.Graph;
+using Microsoft.Graph.Users.Item.SendMail;
 
 namespace Nextplace.Api.Controllers;
 
@@ -362,7 +367,108 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       return StatusCode(500);
     }
   }
-  
+
+  [HttpPost("Share", Name = "PostPropertyShare")]
+  [SwaggerOperation("Post a property share request")]
+  public async Task<ActionResult> PostPropertyShare(PostPropertyShareRequest request)
+  {
+    var executionInstanceId = Guid.NewGuid().ToString();
+
+    try
+    {
+      if (!HttpContext.CheckRateLimit(cache, config, "PostPropertyShare", out var offendingIpAddress))
+      {
+        await context.SaveLogEntry("PostPropertyShare", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+        return StatusCode(429);
+      }
+
+      await context.SaveLogEntry("PostPropertyShare", "Started", "Information", executionInstanceId);
+      await context.SaveLogEntry("PostPropertyShare", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+
+      var property =
+        await context.Property.FirstOrDefaultAsync(p => p.NextplaceId == request.NextplaceId && p.Active);
+
+      if (property == null)
+      {
+        await context.SaveLogEntry("PostPropertyShare", $"Property with NextplaceId {request.NextplaceId} not found", "Warning", executionInstanceId);
+        return StatusCode(404);
+      }
+
+      var shareRef = Guid.NewGuid().ToString();
+
+      var dbEntry = new PropertyShare
+      {
+        PropertyId = property.Id,
+        Active = true,
+        SenderEmailAddress = request.SenderEmailAddress,
+        ReceiverEmailAddress = request.ReceiverEmailAddress,
+        Message = request.Message,
+        CreateDate = DateTime.UtcNow,
+        LastUpdateDate = DateTime.UtcNow,
+        ShareRef = shareRef,
+        ViewCount = 0
+      };
+
+      context.PropertyShare.Add(dbEntry);
+
+      await context.SaveChangesAsync();
+
+      await SendPropertyShareEmail(request.NextplaceId, shareRef, request.SenderEmailAddress, request.ReceiverEmailAddress, request.Message);
+
+      await context.SaveLogEntry("PostPropertyShare", $"Saving property share for {request.NextplaceId} to DB", "Information", executionInstanceId);
+      await context.SaveLogEntry("PostPropertyShare", "Completed", "Information", executionInstanceId);
+
+      return Ok();
+    }
+    catch (Exception ex)
+    {
+      await context.SaveLogEntry("PostPropertyShare", ex, executionInstanceId);
+      return StatusCode(500);
+    }
+  }
+
+  [HttpPost("Share/View", Name = "PostPropertyShareView")]
+  [SwaggerOperation("Post a property share view request")]
+  public async Task<ActionResult> PostPropertyShareView(PostPropertyShareViewRequest request)
+  {
+    var executionInstanceId = Guid.NewGuid().ToString();
+
+    try
+    {
+      if (!HttpContext.CheckRateLimit(cache, config, "PostPropertyShareView", out var offendingIpAddress))
+      {
+        await context.SaveLogEntry("PostPropertyShareView", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
+        return StatusCode(429);
+      }
+
+      await context.SaveLogEntry("PostPropertyShareView", "Started", "Information", executionInstanceId);
+      await context.SaveLogEntry("PostPropertyShareView", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+
+      var propertyShare =
+        await context.PropertyShare.FirstOrDefaultAsync(p => p.ShareRef == request.ShareRef && p.Active);
+
+      if (propertyShare == null)
+      {
+        await context.SaveLogEntry("PostPropertyShareView", $"Property Share with Share Ref {request.ShareRef} not found", "Warning", executionInstanceId);
+        return StatusCode(404);
+      }
+
+      propertyShare.ViewCount++;
+      propertyShare.LastUpdateDate = DateTime.UtcNow;
+
+      await context.SaveChangesAsync();
+      
+      await context.SaveLogEntry("PostPropertyShareView", "Completed", "Information", executionInstanceId);
+
+      return Ok();
+    }
+    catch (Exception ex)
+    {
+      await context.SaveLogEntry("PostPropertyShareView", ex, executionInstanceId);
+      return StatusCode(500);
+    }
+  }
+
   public class Estimate
   {
     [JsonProperty("T")]
@@ -1030,6 +1136,58 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
   }
 
 
+
+  private async Task SendPropertyShareEmail(string nextplaceId, string shareRef, string senderEmailAddress, string receiverEmailAddress, string emailMessage)
+  {
+    var propertySharePage = config["PropertySharePage"]!;
+
+    var akv = new AkvHelper(config);
+
+    var emailTenantId = await akv.GetSecretAsync("EmailTenantId");
+    var emailClientSecret = await akv.GetSecretAsync("EmailClientSecret");
+    var emailClientId = await akv.GetSecretAsync("EmailClientId");
+
+    var clientSecretCredential = new ClientSecretCredential(emailTenantId, emailClientId, emailClientSecret);
+
+    var graphClient = new GraphServiceClient(clientSecretCredential);
+
+    var message = new SendMailPostRequestBody
+    {
+      Message = new Message
+      {
+        Subject = "A property has been shared",
+        Body = new ItemBody
+        {
+          ContentType = BodyType.Html,
+          Content = EmailContent.PropertyShared(propertySharePage, nextplaceId, shareRef, senderEmailAddress, receiverEmailAddress, emailMessage)
+        },
+        ToRecipients = new List<Recipient>
+        {
+          new()
+          {
+            EmailAddress = new EmailAddress
+            {
+              Address = receiverEmailAddress
+            }
+          }
+        },
+        CcRecipients = new List<Recipient>
+        {
+          new()
+          {
+            EmailAddress = new EmailAddress
+            {
+              Address = senderEmailAddress
+            }
+          }
+        }
+      }
+    };
+
+    EmailContent.AddHeaderImage(message.Message);
+
+    await graphClient.Users["admin@nextplace.ai"].SendMail.PostAsync(message);
+  }
   internal static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query, PropertyFilter filter)
   {
     var properties = new List<Property>();

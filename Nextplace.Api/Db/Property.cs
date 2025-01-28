@@ -73,4 +73,7 @@ public sealed class Property : EntityTableData
 
   // ReSharper disable once CollectionNeverUpdated.Global
   public ICollection<PropertyImage>? Images { get; init; }
+
+  // ReSharper disable once CollectionNeverUpdated.Global
+  public ICollection<PropertyShare>? Shares { get; init; }
 }

@@ -169,6 +169,25 @@ public class EmailContent
     .Replace("[Title]", title)
     .Replace("[Body]", body);
 
+
+  internal static string PropertyShared(string pageLink, string nextplaceId, string shareRef, string senderEmailAddress, string receiverEmailAddress, string message)
+  {
+    var title = $"A property has been shared by {senderEmailAddress}";
+
+    var body =
+      $@"Dear <b>{receiverEmailAddress}</b>,
+<br/><br/>
+{senderEmailAddress} has shared a property with you.
+<br/><br/>
+Message: {message}
+<br/><br/>
+<a href=""{string.Format(pageLink, nextplaceId, shareRef)}"">Click here to view the property</a>.
+<br/><br/>";
+
+    return GetEmailContent(title, body);
+
+  }
+
   internal static string NewUserEmailValidation(string newUserValidationPage, string validationKey, string emailAddress)
   {
     var title = "Confirm your email address";

@@ -19,6 +19,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
   public DbSet<PropertyImage> PropertyImage => Set<PropertyImage>();
 
+  public DbSet<PropertyShare> PropertyShare => Set<PropertyShare>();
+
   public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
 
   public DbSet<PropertyPredictionStats> PropertyPredictionStats => Set<PropertyPredictionStats>();
@@ -46,6 +48,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
       .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
     modelBuilder.Entity<PropertyImage>().HasOne(tgp => tgp.Property).WithMany(m => m.Images)
+      .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
+    modelBuilder.Entity<PropertyShare>().HasOne(tgp => tgp.Property).WithMany(m => m.Shares)
       .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
     modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)

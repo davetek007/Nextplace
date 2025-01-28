@@ -3,22 +3,22 @@
 namespace Nextplace.Api.Models;
 
 public class PostPropertyValuationRequest(
-    string requestorEmailAddress,
-    double longitude,
-    double latitude,
-    string? city,
-    string? state,
-    string? zipCode,
-    string? address,
-    int? numberOfBeds,
-    double? numberOfBaths,
-    int? squareFeet,
-    long? lotSize,
-    int? yearBuilt,
-    int? hoaDues,
-    int propertyType,
-    double proposedListingPrice,
-    string? country)
+  string requestorEmailAddress,
+  double longitude,
+  double latitude,
+  string? city,
+  string? state,
+  string? zipCode,
+  string? address,
+  int? numberOfBeds,
+  double? numberOfBaths,
+  int? squareFeet,
+  long? lotSize,
+  int? yearBuilt,
+  int? hoaDues,
+  int propertyType,
+  double proposedListingPrice,
+  string? country)
 {
   [Required]
   public string RequestorEmailAddress { get; } = requestorEmailAddress;

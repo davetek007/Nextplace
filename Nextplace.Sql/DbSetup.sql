@@ -107,6 +107,19 @@ create table dbo.PropertyImage (
 	active bit not null)
 go
 
+create table dbo.PropertyShare (
+	id bigint identity (1,1) primary key not null, 
+	propertyId bigint foreign key references dbo.Property (id) not null,
+	senderEmailAddress nvarchar (450) not null, 
+	receiverEmailAddress nvarchar (450) not null, 
+	message nvarchar (max) null, 
+	shareRef nvarchar (450) not null,
+	viewCount int not null,
+	createDate datetime2 not null,
+	lastUpdateDate datetime2 not null,
+	active bit not null)
+go
+
 create table dbo.PropertyEstimate (
 	id bigint identity (1,1) primary key not null, 
 	propertyId bigint foreign key references dbo.Property (id) not null,
@@ -523,8 +536,11 @@ AS
 
 		DELETE FROM dbo.PropertyPrediction
 		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
-
+		
 		DELETE FROM dbo.PropertyEstimateStats
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyShare
 		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete);
 
 		DELETE FROM dbo.PropertyPredictionStats
@@ -537,6 +553,7 @@ AS
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('DeleteOldProperties', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
 go
+
 create PROCEDURE [dbo].DeleteOldMinerStats  (@executionInstanceId nvarchar(450))
 AS
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
