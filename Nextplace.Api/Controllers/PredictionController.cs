@@ -132,11 +132,9 @@ public class PredictionController(AppDbContext context, IConfiguration configura
         }
         else
         {
-          var property =
-              await context.Property.Where(p => p.NextplaceId == prediction.NextplaceId)
-                  .OrderByDescending(p => p.ListingDate).FirstOrDefaultAsync();
+          var propertyId = await GetPropertyId(prediction.NextplaceId);
 
-          if (property == null)
+          if (propertyId == null)
           {
             propertyMissing++;
             continue;
@@ -156,7 +154,7 @@ public class PredictionController(AppDbContext context, IConfiguration configura
             PredictedSaleDate = prediction.PredictedSaleDate!.Value,
             PredictedSalePrice = prediction.PredictedSalePrice,
             PredictionDate = prediction.PredictionDate,
-            PropertyId = property.Id,
+            PropertyId = propertyId.Value,
             CreateDate = DateTime.UtcNow,
             Active = true,
             LastUpdateDate = DateTime.UtcNow
@@ -197,6 +195,40 @@ public class PredictionController(AppDbContext context, IConfiguration configura
       await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
       return StatusCode(500);
     }
+  }
+
+  private async Task<long?> GetPropertyId(string nextplaceId)
+  {
+    const string cacheKey = "Properties";
+
+    if (cache.TryGetValue(cacheKey, out var cachedData))
+    {
+      var data = (Dictionary<string, long>)cachedData!;
+      if (data.TryGetValue(nextplaceId, out var id))
+      {
+        return id;
+      }
+
+      return null;
+    }
+
+    var properties = await context.Property
+      .GroupBy(p => p.NextplaceId)
+      .Select(g => new
+      {
+        NextplaceId = g.Key,
+        MaxId = g.Max(p => p.Id)
+      })
+      .ToDictionaryAsync(x => x.NextplaceId, x => x.MaxId);
+    
+    cache.Set(cacheKey, properties, TimeSpan.FromMinutes(45));
+
+    if (properties.TryGetValue(nextplaceId, out var propertyId))
+    {
+      return propertyId;
+    }
+
+    return null;
   }
 
   private async Task<List<Validator>> GetValidators()
