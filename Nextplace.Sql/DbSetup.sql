@@ -549,6 +549,89 @@ AS
 		DELETE FROM dbo.Property
 		WHERE id IN (SELECT id FROM @PropertyIdsToDelete);
     end
+		
+	select		propertyId, max(id) as maxId
+	into		#relisted
+	from		dbo.Property 
+	group by	propertyid 
+	having		count(1) > 1
+
+    WHILE 1 = 1
+    BEGIN
+        DECLARE @RelistedPropertyIdsToDelete TABLE (id BIGINT);
+
+        INSERT INTO @RelistedPropertyIdsToDelete (id)
+        SELECT TOP (1000) id
+        FROM dbo.Property p, #relisted r
+        WHERE  p.propertyId = r.propertyId
+		and		p.id != r.maxId
+
+        SET @RowCount = @@ROWCOUNT;
+
+        IF @RowCount = 0 BREAK;
+					
+		insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+		values		('DeleteOldProperties', 'Deleting batch of ' + cast (@rowCount as nvarchar (450)) + ' relisted properties', 'Information', getutcdate(), @executionInstanceId)
+
+		DELETE FROM dbo.PropertyImage
+		WHERE propertyId IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyEstimate
+		WHERE propertyId IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyPrediction
+		WHERE propertyId IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+		
+		DELETE FROM dbo.PropertyEstimateStats
+		WHERE propertyId IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyShare
+		WHERE propertyId IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+
+		DELETE FROM dbo.PropertyPredictionStats
+		WHERE propertyId IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+
+		DELETE FROM dbo.Property
+		WHERE id IN (SELECT id FROM @RelistedPropertyIdsToDelete);
+    end
+
+    WHILE 1 = 1
+    BEGIN
+        DECLARE @PropertyIdsToDelete2 TABLE (id BIGINT);
+
+        INSERT INTO @PropertyIdsToDelete2 (id)
+        SELECT TOP (1000) id
+        FROM dbo.Property
+        WHERE listingDate < DATEADD(dd, -90, getutcdate());
+
+        SET @RowCount = @@ROWCOUNT;
+
+        IF @RowCount = 0 BREAK;
+					
+		insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+		values		('DeleteOldProperties', 'Deleting batch of ' + cast (@rowCount as nvarchar (450)) + ' properties unsold in 90 days', 'Information', getutcdate(), @executionInstanceId)
+
+		DELETE FROM dbo.PropertyImage
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete2);
+
+		DELETE FROM dbo.PropertyEstimate
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete2);
+
+		DELETE FROM dbo.PropertyPrediction
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete2);
+		
+		DELETE FROM dbo.PropertyEstimateStats
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete2);
+
+		DELETE FROM dbo.PropertyShare
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete2);
+
+		DELETE FROM dbo.PropertyPredictionStats
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete2);
+
+		DELETE FROM dbo.Property
+		WHERE id IN (SELECT id FROM @PropertyIdsToDelete2);
+    end 
 
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('DeleteOldProperties', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
