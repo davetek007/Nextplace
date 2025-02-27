@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nextplace.Api.Db;
+using Nextplace.Api.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,9 +31,13 @@ builder.Services.AddCors(options =>
         });
 });
 
-builder.Services.AddControllers().AddJsonOptions(options =>
+builder.Services.AddScoped<ApiFilter>();
+builder.Services.AddControllers(options =>
 {
-  options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+  options.Filters.Add<ApiFilter>();
+}).AddJsonOptions(jsonOptions =>
+{
+  jsonOptions.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
 builder.Services.AddEndpointsApiExplorer();

@@ -19,182 +19,162 @@ public class PredictionController(AppDbContext context, IConfiguration configura
   [HttpPost]
   public async Task<ActionResult> PostPredictions(List<PostPredictionRequest> request)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+
     var predictionLimit = configuration.GetValue<int>("PostPredictionsLimit");
 
-    try
+    var ipAddressList = HttpContext.GetIpAddressesFromHeader(out var ipAddressLog);
+
+    var validators = await GetValidators();
+    var matchingValidator = validators.FirstOrDefault(v => ipAddressList.Contains(v.IpAddress));
+
+    if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList, out var whitelistOnly))
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "PostPredictions", out var offendingIpAddress))
+      await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
+      await context.SaveLogEntry("PostPredictions", "IP address whitelisted", "Information", executionInstanceId);
+    }
+    else if (matchingValidator == null)
+    {
+      await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
+      await context.SaveLogEntry("PostPredictions", "IP address not allowed", "Warning", executionInstanceId);
+
+      return StatusCode(403);
+    }
+    else
+    {
+      if (whitelistOnly)
       {
-        await context.SaveLogEntry("PostPredictions", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("PostPredictions", "Started", "Information", executionInstanceId);
-      //await context.SaveLogEntry("PostPredictions", "Predictions: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
-
-      var ipAddressList = HttpContext.GetIpAddressesFromHeader(out var ipAddressLog);
-
-      var validators = await GetValidators();
-      var matchingValidator = validators.FirstOrDefault(v => ipAddressList.Contains(v.IpAddress));
-      
-      if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList, out var whitelistOnly))
-      {
-        await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
-        await context.SaveLogEntry("PostPredictions", "IP address whitelisted", "Information", executionInstanceId);
-      }
-      else if (matchingValidator == null)
-      {
-        await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
-        await context.SaveLogEntry("PostPredictions", "IP address not allowed", "Warning", executionInstanceId);
-        await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
-
-        return StatusCode(403);
-      }
-      else
-      {
-        if (whitelistOnly)
-        {
-          await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
-          return CreatedAtAction(nameof(PostPredictions), null, null);
-        }
-
-        await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
-        await context.SaveLogEntry("PostPredictions", $"IP address returned for validator {matchingValidator.HotKey} (ID: {matchingValidator.Id})", "Information", executionInstanceId);
-      }
-
-      var propertyMissing = 0;
-      var propertyValuationMissing = 0;
-      var activePropertyValuationPredictions = 0;
-      var activePredictions = 0;
-      var deleted = 0;
-      var inserted = 0;
-      var insertedPropertyValuations = 0;
-      var predictedSaleDateMissing = 0;
-
-      if (request.Count > predictionLimit)
-      {
-        await context.SaveLogEntry("PostPredictions", "Too many predictions", "Warning", executionInstanceId);
-        await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
         return CreatedAtAction(nameof(PostPredictions), null, null);
       }
 
-      foreach (var prediction in request)
-      {
-        if (prediction.NextplaceId.StartsWith("PVR-"))
-        {
-          var propertyValuation =
-              await context.PropertyValuation.Where(p => p.NextplaceId == prediction.NextplaceId)
-                  .FirstOrDefaultAsync();
+      await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
+      await context.SaveLogEntry("PostPredictions", $"IP address returned for validator {matchingValidator.HotKey} (ID: {matchingValidator.Id})", "Information", executionInstanceId);
+    }
 
-          if (propertyValuation == null)
-          {
-            propertyValuationMissing++;
-            continue;
-          }
+    var propertyMissing = 0;
+    var propertyValuationMissing = 0;
+    var activePropertyValuationPredictions = 0;
+    var activePredictions = 0;
+    var deleted = 0;
+    var inserted = 0;
+    var insertedPropertyValuations = 0;
+    var predictedSaleDateMissing = 0;
 
-          var minerId = await GetMinerId(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
-
-          var hasActivePredictions = await context.PropertyValuationPrediction.Where(p =>
-              p.MinerId == minerId && p.PropertyValuationId == propertyValuation.Id && p.Active).AnyAsync(existingEntry =>
-              existingEntry.PredictionDate >= prediction.PredictionDate);
-
-          if (hasActivePredictions)
-          {
-            activePropertyValuationPredictions++;
-            continue;
-          }
-
-          var dbEntry = new PropertyValuationPrediction
-          {
-            MinerId = minerId,
-            PredictedSalePrice = prediction.PredictedSalePrice,
-            PredictionDate = prediction.PredictionDate,
-            PropertyValuationId = propertyValuation.Id,
-            CreateDate = DateTime.UtcNow,
-            Active = true,
-            LastUpdateDate = DateTime.UtcNow
-          };
-
-          if (prediction.PredictionScore.HasValue)
-          {
-            dbEntry.PredictionScore = prediction.PredictionScore.Value;
-          }
-
-          if (matchingValidator != null)
-          {
-            dbEntry.ValidatorId = matchingValidator.Id;
-          }
-
-          insertedPropertyValuations++;
-
-          context.PropertyValuationPrediction.Add(dbEntry); 
-        }
-        else
-        {
-          var propertyId = await GetPropertyId(prediction.NextplaceId);
-
-          if (propertyId == null)
-          {
-            propertyMissing++;
-            continue;
-          }
-
-          if (!prediction.PredictedSaleDate.HasValue)
-          {
-            predictedSaleDateMissing++;
-            continue;
-          }
-
-          var minerId = await GetMinerId(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
-
-          var dbEntry = new PropertyPrediction
-          {
-            MinerId = minerId,
-            PredictedSaleDate = prediction.PredictedSaleDate!.Value,
-            PredictedSalePrice = prediction.PredictedSalePrice,
-            PredictionDate = prediction.PredictionDate,
-            PropertyId = propertyId.Value,
-            CreateDate = DateTime.UtcNow,
-            Active = true,
-            LastUpdateDate = DateTime.UtcNow
-          };
-
-          if (prediction.PredictionScore.HasValue)
-          {
-            dbEntry.PredictionScore = prediction.PredictionScore.Value;
-          }
-
-          if (matchingValidator != null)
-          {
-            dbEntry.ValidatorId = matchingValidator.Id;
-          }
-
-          inserted++;
-
-          context.PropertyPrediction.Add(dbEntry);
-        }
-      }
-      
-      await context.SaveChangesAsync();
-      
-      await context.SaveLogEntry("PostPredictions",
-          $"Properties: Inserted {inserted}, Deleted {deleted}, Properties missing {propertyMissing}, Active predictions {activePredictions}, Predicted Sale Date missing {predictedSaleDateMissing}", "Information", executionInstanceId);
-
-      await context.SaveLogEntry("PostPredictions",
-          $"Property Valuations: Inserted {insertedPropertyValuations}, Property valuations missing {propertyValuationMissing}, Active predictions {activePropertyValuationPredictions}", "Information", executionInstanceId);
-
-      await context.SaveLogEntry("PostPredictions", "Saving to DB", "Information", executionInstanceId);
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
+    if (request.Count > predictionLimit)
+    {
+      await context.SaveLogEntry("PostPredictions", "Too many predictions", "Warning", executionInstanceId);
       return CreatedAtAction(nameof(PostPredictions), null, null);
     }
-    catch (Exception ex)
+
+    foreach (var prediction in request)
     {
-      await context.SaveLogEntry("PostPredictions", ex, executionInstanceId);
-      return StatusCode(500);
+      if (prediction.NextplaceId.StartsWith("PVR-"))
+      {
+        var propertyValuation =
+            await context.PropertyValuation.Where(p => p.NextplaceId == prediction.NextplaceId)
+                .FirstOrDefaultAsync();
+
+        if (propertyValuation == null)
+        {
+          propertyValuationMissing++;
+          continue;
+        }
+
+        var minerId = await GetMinerId(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
+
+        var hasActivePredictions = await context.PropertyValuationPrediction.Where(p =>
+            p.MinerId == minerId && p.PropertyValuationId == propertyValuation.Id && p.Active).AnyAsync(existingEntry =>
+            existingEntry.PredictionDate >= prediction.PredictionDate);
+
+        if (hasActivePredictions)
+        {
+          activePropertyValuationPredictions++;
+          continue;
+        }
+
+        var dbEntry = new PropertyValuationPrediction
+        {
+          MinerId = minerId,
+          PredictedSalePrice = prediction.PredictedSalePrice,
+          PredictionDate = prediction.PredictionDate,
+          PropertyValuationId = propertyValuation.Id,
+          CreateDate = DateTime.UtcNow,
+          Active = true,
+          LastUpdateDate = DateTime.UtcNow
+        };
+
+        if (prediction.PredictionScore.HasValue)
+        {
+          dbEntry.PredictionScore = prediction.PredictionScore.Value;
+        }
+
+        if (matchingValidator != null)
+        {
+          dbEntry.ValidatorId = matchingValidator.Id;
+        }
+
+        insertedPropertyValuations++;
+
+        context.PropertyValuationPrediction.Add(dbEntry);
+      }
+      else
+      {
+        var propertyId = await GetPropertyId(prediction.NextplaceId);
+
+        if (propertyId == null)
+        {
+          propertyMissing++;
+          continue;
+        }
+
+        if (!prediction.PredictedSaleDate.HasValue)
+        {
+          predictedSaleDateMissing++;
+          continue;
+        }
+
+        var minerId = await GetMinerId(prediction.MinerHotKey, prediction.MinerColdKey, executionInstanceId);
+
+        var dbEntry = new PropertyPrediction
+        {
+          MinerId = minerId,
+          PredictedSaleDate = prediction.PredictedSaleDate!.Value,
+          PredictedSalePrice = prediction.PredictedSalePrice,
+          PredictionDate = prediction.PredictionDate,
+          PropertyId = propertyId.Value,
+          CreateDate = DateTime.UtcNow,
+          Active = true,
+          LastUpdateDate = DateTime.UtcNow
+        };
+
+        if (prediction.PredictionScore.HasValue)
+        {
+          dbEntry.PredictionScore = prediction.PredictionScore.Value;
+        }
+
+        if (matchingValidator != null)
+        {
+          dbEntry.ValidatorId = matchingValidator.Id;
+        }
+
+        inserted++;
+
+        context.PropertyPrediction.Add(dbEntry);
+      }
     }
+
+    await context.SaveChangesAsync();
+
+    await context.SaveLogEntry("PostPredictions",
+        $"Properties: Inserted {inserted}, Deleted {deleted}, Properties missing {propertyMissing}, Active predictions {activePredictions}, Predicted Sale Date missing {predictedSaleDateMissing}", "Information", executionInstanceId);
+
+    await context.SaveLogEntry("PostPredictions",
+        $"Property Valuations: Inserted {insertedPropertyValuations}, Property valuations missing {propertyValuationMissing}, Active predictions {activePropertyValuationPredictions}", "Information", executionInstanceId);
+
+    await context.SaveLogEntry("PostPredictions", "Saving to DB", "Information", executionInstanceId);
+    await context.SaveChangesAsync();
+
+    return CreatedAtAction(nameof(PostPredictions), null, null);
   }
 
   private async Task<long?> GetPropertyId(string nextplaceId)
@@ -289,50 +269,34 @@ public class PredictionController(AppDbContext context, IConfiguration configura
   [SwaggerOperation("Search for property predictions")]
   public async Task<ActionResult<List<Models.PropertyPrediction>>> Search([FromQuery] PredictionFilter filter)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "SearchPropertyPredictions", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("SearchPropertyPredictions", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+    await context.SaveLogEntry("SearchPropertyPredictions", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
 
-      await context.SaveLogEntry("SearchPropertyPredictions", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("SearchPropertyPredictions", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
+    filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 200);
 
-      filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 200);
+    var query = context.PropertyPrediction
+      .Include(tgp => tgp.Property)
+      .Include(tgp => tgp.Miner)
+      .Where(tgp => tgp.Active);
 
-      var query = context.PropertyPrediction
-          .Include(tgp => tgp.Property)
-          .Include(tgp => tgp.Miner)
-          .Where(tgp => tgp.Active);
+    query = ApplyDateFilters(query, filter);
+    query = ApplyPropertyIdFilter(query, filter);
+    query = ApplyMinerFilter(query, filter);
+    query = ApplySortOrder(query, filter.SortOrder);
 
-      query = ApplyDateFilters(query, filter);
-      query = ApplyPropertyIdFilter(query, filter);
-      query = ApplyMinerFilter(query, filter);
-      query = ApplySortOrder(query, filter.SortOrder);
+    var totalCount = await query.CountAsync();
+    Response.Headers.Append("Bettensor-Search-Total-Count", totalCount.ToString());
 
-      var totalCount = await query.CountAsync();
-      Response.Headers.Append("Bettensor-Search-Total-Count", totalCount.ToString());
+    Response.AppendCorsHeaders();
 
-      Response.AppendCorsHeaders();
+    await context.SaveLogEntry("SearchPropertyPredictions", $"{totalCount} predictions found", "Information", executionInstanceId);
 
-      await context.SaveLogEntry("SearchPropertyPredictions", $"{totalCount} predictions found", "Information", executionInstanceId);
+    query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
 
-      query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
+    var propertyPredictions = await GetPropertyPredictions(query);
 
-      var propertyPredictions = await GetPropertyPredictions(query);
-
-      await context.SaveLogEntry("SearchPropertyPredictions", "Completed", "Information", executionInstanceId);
-      return Ok(propertyPredictions);
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("SearchPropertyPredictions", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+    return Ok(propertyPredictions);
   }
 
   private static IQueryable<PropertyPrediction> ApplyDateFilters(IQueryable<PropertyPrediction> query, PredictionFilter filter)

@@ -95,7 +95,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     }
   }
 
-  public async Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId, string? ipAddress)
+  public Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId, string? ipAddress)
   {
     ApiLog.Add(new ApiLog
     {
@@ -106,11 +106,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
       ExecutionInstanceId = executionInstanceId,
       IpAddress = ipAddress
     });
-
-    await SaveChangesAsync();
+    return Task.CompletedTask;
   }
 
-  public async Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId, string? ipAddress)
+  public Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId, string? ipAddress)
   {
     ApiLog.Add(new ApiLog
     {
@@ -121,11 +120,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
       ExecutionInstanceId = executionInstanceId,
       IpAddress = ipAddress
     });
-
-    await SaveChangesAsync();
+    return Task.CompletedTask;
   }
 
-  public async Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId)
+  public Task SaveLogEntry(string apiName, string logEntry, string entryType, string executionInstanceId)
   {
     ApiLog.Add(new ApiLog
     {
@@ -135,11 +133,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
       TimeStamp = DateTime.UtcNow,
       ExecutionInstanceId = executionInstanceId
     });
-
-    await SaveChangesAsync();
+    return Task.CompletedTask;
   }
 
-  public async Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId)
+  public Task SaveLogEntry(string apiName, Exception ex, string executionInstanceId)
   {
     ApiLog.Add(new ApiLog
     {
@@ -149,8 +146,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
       TimeStamp = DateTime.UtcNow,
       ExecutionInstanceId = executionInstanceId
     });
-
-    await SaveChangesAsync();
+    return Task.CompletedTask;
   }
 
   public static string ExceptionToString(Exception ex)

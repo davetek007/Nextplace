@@ -4,7 +4,6 @@ using Azure.Identity;
 using Microsoft.Graph.Users.Item.SendMail;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Nextplace.Api.Db;
@@ -17,78 +16,60 @@ namespace Nextplace.Api.Controllers;
 [Tags("User APIs")]
 [ApiController]
 [Route("Users")]
-public class UserController(AppDbContext context, IConfiguration configuration, IMemoryCache cache) : ControllerBase
+public class UserController(AppDbContext context, IConfiguration configuration) : ControllerBase
 {
   [HttpPost("Register", Name = "RegisterUser")]
   [SwaggerOperation("Register a new user")]
   public async Task<ActionResult> RegisterUser(RegisterUserRequest request)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+
+    if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "RegisterUser", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("RegisterUser", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("RegisterUser", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
-      {
-        await context.SaveLogEntry("RegisterUser", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      if (string.IsNullOrWhiteSpace(request.Password))
-      {
-        await context.SaveLogEntry("RegisterUser", "Invalid password", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Password is not valid");
-      }
-
-      if (context.User.Any(u => u.EmailAddress == request.EmailAddress && u.Active))
-      {
-        await context.SaveLogEntry("RegisterUser", $"Email address {request.EmailAddress} already exists", "Warning", executionInstanceId, clientIp);
-        return Conflict();
-      }
-
-      var validationKey = Guid.NewGuid().ToString();
-      var salt = GenerateSalt();
-      var hashedPassword = HashPasswordWithSalt(request.Password, salt);
-      var hashedValidationKey = HashPasswordWithSalt(validationKey, salt);
-
-      var user = new Db.User
-      {
-        EmailAddress = request.EmailAddress,
-        Password = hashedPassword,
-        Salt = salt,
-        Active = true,
-        ValidationKey = hashedValidationKey,
-        CreateDate = DateTime.UtcNow,
-        LastUpdateDate = DateTime.UtcNow,
-        Status = "Pending Validation",
-        UserType = "Standard"
-      };
-
-      context.User.Add(user);
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("RegisterUser", $"User {user.Id} created", "Information", executionInstanceId, clientIp);
-
-      await SendRegisterUserEmail(validationKey, request.EmailAddress);
-      await context.SaveLogEntry("RegisterUser", $"Email sent to {request.EmailAddress}", "Information", executionInstanceId, clientIp);
-
-      await context.SaveLogEntry("RegisterUser", "Completed", "Information", executionInstanceId, clientIp);
-
-      return CreatedAtAction(nameof(RegisterUser), null, null);
+      await context.SaveLogEntry("RegisterUser", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
     }
-    catch (Exception ex)
+
+    if (string.IsNullOrWhiteSpace(request.Password))
     {
-      await context.SaveLogEntry("RegisterUser", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
+      await context.SaveLogEntry("RegisterUser", "Invalid password", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Password is not valid");
     }
+
+    if (context.User.Any(u => u.EmailAddress == request.EmailAddress && u.Active))
+    {
+      await context.SaveLogEntry("RegisterUser", $"Email address {request.EmailAddress} already exists", "Warning", executionInstanceId, clientIp);
+      return Conflict();
+    }
+
+    var validationKey = Guid.NewGuid().ToString();
+    var salt = GenerateSalt();
+    var hashedPassword = HashPasswordWithSalt(request.Password, salt);
+    var hashedValidationKey = HashPasswordWithSalt(validationKey, salt);
+
+    var user = new Db.User
+    {
+      EmailAddress = request.EmailAddress,
+      Password = hashedPassword,
+      Salt = salt,
+      Active = true,
+      ValidationKey = hashedValidationKey,
+      CreateDate = DateTime.UtcNow,
+      LastUpdateDate = DateTime.UtcNow,
+      Status = "Pending Validation",
+      UserType = "Standard"
+    };
+
+    context.User.Add(user);
+    await context.SaveChangesAsync();
+
+    await context.SaveLogEntry("RegisterUser", $"User {user.Id} created", "Information", executionInstanceId, clientIp);
+
+    await SendRegisterUserEmail(validationKey, request.EmailAddress);
+    await context.SaveLogEntry("RegisterUser", $"Email sent to {request.EmailAddress}", "Information", executionInstanceId, clientIp);
+
+    return CreatedAtAction(nameof(RegisterUser), null, null);
   }
 
   [HttpPatch("Register/Revalidate", Name = "RegisterUserRevalidate")]
@@ -96,53 +77,34 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
   public async Task<ActionResult> RegisterUserRevalidate([SwaggerParameter("Email Address", Required = true)][FromBody] string emailAddress)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    if (string.IsNullOrWhiteSpace(emailAddress) || !IsValidEmailAddress(emailAddress))
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "RegisterUserRevalidate", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("RegisterUserRevalidate", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("RegisterUserRevalidate", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(emailAddress) || !IsValidEmailAddress(emailAddress))
-      {
-        await context.SaveLogEntry("RegisterUserRevalidate", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      var user = await context.User.FirstOrDefaultAsync(u =>
-        u.EmailAddress == emailAddress && u.Active && u.Status == "Pending Validation");
-
-      if (user == null)
-      {
-        await context.SaveLogEntry("RegisterUserRevalidate", $"Email address {emailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
-        return Conflict();
-      }
-
-      var validationKey = Guid.NewGuid().ToString();
-      var salt = user.Salt;
-      var hashedValidationKey = HashPasswordWithSalt(validationKey, salt);
-
-      user.ValidationKey = hashedValidationKey;
-      user.LastUpdateDate = DateTime.UtcNow;
-      await context.SaveChangesAsync();
-
-      await SendRegisterUserEmail(validationKey, emailAddress);
-      await context.SaveLogEntry("RegisterUserRevalidate", $"Email sent to {emailAddress}", "Information", executionInstanceId, clientIp);
-
-      await context.SaveLogEntry("RegisterUserRevalidate", "Completed", "Information", executionInstanceId, clientIp);
-
-      return Ok();
+      await context.SaveLogEntry("RegisterUserRevalidate", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
     }
-    catch (Exception ex)
+
+    var user = await context.User.FirstOrDefaultAsync(u =>
+      u.EmailAddress == emailAddress && u.Active && u.Status == "Pending Validation");
+
+    if (user == null)
     {
-      await context.SaveLogEntry("RegisterUserRevalidate", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
+      await context.SaveLogEntry("RegisterUserRevalidate", $"Email address {emailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
+      return Conflict();
     }
+
+    var validationKey = Guid.NewGuid().ToString();
+    var salt = user.Salt;
+    var hashedValidationKey = HashPasswordWithSalt(validationKey, salt);
+
+    user.ValidationKey = hashedValidationKey;
+    user.LastUpdateDate = DateTime.UtcNow;
+    await context.SaveChangesAsync();
+
+    await SendRegisterUserEmail(validationKey, emailAddress);
+    await context.SaveLogEntry("RegisterUserRevalidate", $"Email sent to {emailAddress}", "Information", executionInstanceId, clientIp);
+
+    return Ok();
   }
 
   [HttpPost("Validate", Name = "ValidateUser")]
@@ -150,319 +112,36 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
   public async Task<ActionResult<Models.User>> ValidateUser(ValidateUserRequest request)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "ValidateUser", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("ValidateUser", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("ValidateUser", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
-      {
-        await context.SaveLogEntry("ValidateUser", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      if (string.IsNullOrWhiteSpace(request.ValidationKey))
-      {
-        await context.SaveLogEntry("ValidateUser", "Invalid validation key", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Validation Key is not valid");
-      }
-
-      var user = await context.User.Include(u => u.UserFavorites).Include(u => u.UserSettings)
-        .FirstOrDefaultAsync(
-          u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Pending Validation");
-      
-      if (user == null)
-      {
-        await context.SaveLogEntry("ValidateUser", $"Email address {request.EmailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      var salt = user.Salt;
-      var hashedValidationKey = HashPasswordWithSalt(request.ValidationKey, salt);
-
-      if (user.ValidationKey == hashedValidationKey)
-      {
-        user.Status = "Validated";
-        user.ValidationKey = null;
-        var sessionToken = Guid.NewGuid().ToString();
-        var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
-        user.SessionToken = hashedSessionToken;
-        user.LastUpdateDate = DateTime.UtcNow;
-
-        await context.SaveChangesAsync();
-
-        await context.SaveLogEntry("ValidateUser", $"User {user.Id} validated", "Information", executionInstanceId, clientIp);
-
-        Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-      }
-      else
-      {
-        await context.SaveLogEntry("ValidateUser", $"Validation key does not match for user ID {user.Id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      await context.SaveLogEntry("ValidateUser", "Completed", "Information", executionInstanceId, clientIp);
-
-      return Ok(await ConvertDbUserToModel(user));
+      await context.SaveLogEntry("ValidateUser", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
     }
-    catch (Exception ex)
+
+    if (string.IsNullOrWhiteSpace(request.ValidationKey))
     {
-      await context.SaveLogEntry("ValidateUser", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
+      await context.SaveLogEntry("ValidateUser", "Invalid validation key", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Validation Key is not valid");
     }
-  }
 
-  [HttpPost("ForgotPassword/{emailAddress}", Name = "ForgotPassword")]
-  [SwaggerOperation("Forgot password")]
-  public async Task<ActionResult> ForgotPassword([SwaggerParameter("Email Address", Required = true)][FromRoute] string emailAddress)
-  {
-    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var user = await context.User.Include(u => u.UserFavorites).Include(u => u.UserSettings)
+      .FirstOrDefaultAsync(
+        u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Pending Validation");
+
+    if (user == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "ForgotPassword", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("ForgotPassword", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("ForgotPassword", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(emailAddress) || !IsValidEmailAddress(emailAddress))
-      {
-        await context.SaveLogEntry("ForgotPassword", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      var user = await context.User.FirstOrDefaultAsync(u => u.EmailAddress == emailAddress && u.Active && u.Status == "Validated");
-      if (user == null)
-      {
-        await context.SaveLogEntry("ForgotPassword", $"Email address {emailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      var validationKey = Guid.NewGuid().ToString();
-      var salt = user.Salt;
-      var hashedValidationKey = HashPasswordWithSalt(validationKey, salt);
-
-      user.ValidationKey = hashedValidationKey;
-      user.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      await SendForgotPasswordEmail(validationKey, emailAddress);
-      await context.SaveLogEntry("ForgotPassword", $"Email sent to {emailAddress}", "Information", executionInstanceId, clientIp);
-
-      await context.SaveLogEntry("ForgotPassword", "Completed", "Information", executionInstanceId, clientIp);
-
-      return Ok();
+      await context.SaveLogEntry("ValidateUser", $"Email address {request.EmailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
     }
-    catch (Exception ex)
+
+    var salt = user.Salt;
+    var hashedValidationKey = HashPasswordWithSalt(request.ValidationKey, salt);
+
+    if (user.ValidationKey == hashedValidationKey)
     {
-      await context.SaveLogEntry("ForgotPassword", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
-  }
-
-  [HttpPost("ResetPassword", Name = "ResetPassword")]
-  [SwaggerOperation("Reset user password")]
-  public async Task<ActionResult<Models.User>> ResetPassword(ResetPasswordRequest request)
-  {
-    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "ResetPassword", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("ResetPassword", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("ResetPassword", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
-      {
-        await context.SaveLogEntry("ResetPassword", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      if (string.IsNullOrWhiteSpace(request.ValidationKey))
-      {
-        await context.SaveLogEntry("ResetPassword", "Invalid validation key", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Validation Key is not valid");
-      }
-
-      if (string.IsNullOrWhiteSpace(request.Password))
-      {
-        await context.SaveLogEntry("ResetPassword", "Invalid password", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Password is not valid");
-      }
-
-      var user = await context.User.Include(u => u.UserFavorites).Include(u => u.UserSettings)
-        .FirstOrDefaultAsync(u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Validated");
-      if (user == null)
-      {
-        await context.SaveLogEntry("ResetPassword", $"Email address {request.EmailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      var salt = user.Salt;
-      var hashedValidationKey = HashPasswordWithSalt(request.ValidationKey, salt);
-
-      if (user.ValidationKey == hashedValidationKey)
-      {
-        salt = GenerateSalt();
-        var hashedPassword = HashPasswordWithSalt(request.Password, salt);
-
-        user.Password = hashedPassword;
-        user.Salt = salt;
-        user.ValidationKey = null;
-        var sessionToken = Guid.NewGuid().ToString();
-        var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
-        user.SessionToken = hashedSessionToken;
-        user.LastUpdateDate = DateTime.UtcNow;
-
-        await context.SaveChangesAsync();
-
-        await context.SaveLogEntry("ResetPassword", $"User {user.Id} validated", "Information", executionInstanceId, clientIp);
-
-        Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-      }
-      else
-      {
-        await context.SaveLogEntry("ResetPassword", $"Validation key does not match for user ID {user.Id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      await context.SaveLogEntry("ResetPassword", "Completed", "Information", executionInstanceId, clientIp);
-
-      return Ok(await  ConvertDbUserToModel(user));
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("ResetPassword", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
-  }
-
-  [HttpDelete("", Name = "DeleteUser")]
-  [SwaggerOperation("Delete user")]
-  public async Task<ActionResult> DeleteUser(DeleteUserRequest request)
-  {
-    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "DeleteUser", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("DeleteUser", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("DeleteUser", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
-      {
-        await context.SaveLogEntry("DeleteUser", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      if (string.IsNullOrWhiteSpace(request.Password))
-      {
-        await context.SaveLogEntry("DeleteUser", "Invalid password", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Password is not valid");
-      }
-
-      var user = await context.User.FirstOrDefaultAsync(u => u.EmailAddress == request.EmailAddress && u.Active);
-      if (user == null)
-      {
-        await context.SaveLogEntry("DeleteUser", $"Email address {request.EmailAddress} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      var salt = user.Salt;
-      var hashedPassword = HashPasswordWithSalt(request.Password, salt);
-
-      if (user.Password != hashedPassword)
-      {
-        await context.SaveLogEntry("DeleteUser", $"Password does not match for email address {request.EmailAddress}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      user.Active = false;
-      user.LastUpdateDate = DateTime.UtcNow;
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("DeleteUser", "Completed", "Information", executionInstanceId, clientIp);
-
-      return Ok();
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("DeleteUser", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
-  }
-
-  [HttpPost("Logon", Name = "LogonUser")]
-  [SwaggerOperation("User logon")]
-  public async Task<ActionResult<Models.User>> LogonUser(LogonUserRequest request)
-  {
-    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "LogonUser", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("LogonUser", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("LogonUser", "Started", "Information", executionInstanceId, clientIp);
-
-      if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
-      {
-        await context.SaveLogEntry("LogonUser", "Invalid email", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Email Address is not valid");
-      }
-
-      if (string.IsNullOrWhiteSpace(request.Password))
-      {
-        await context.SaveLogEntry("LogonUser", "Invalid password", "Warning", executionInstanceId, clientIp);
-        return BadRequest("Password is not valid");
-      }
-
-      var user = context.User
-        .Include(u => u.UserSettings!)
-        .Include(u => u.UserFavorites!)
-        .FirstOrDefault(u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Validated");
-
-      if (user == null)
-      {
-        await context.SaveLogEntry("LogonUser", $"Email address {request.EmailAddress} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      var salt = user.Salt;
-      var hashedPassword = HashPasswordWithSalt(request.Password, salt);
-
-      if (user.Password != hashedPassword)
-      {
-        await context.SaveLogEntry("LogonUser", $"Password does not match for email address {request.EmailAddress}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
+      user.Status = "Validated";
+      user.ValidationKey = null;
       var sessionToken = Guid.NewGuid().ToString();
       var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
       user.SessionToken = hashedSessionToken;
@@ -470,17 +149,205 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
 
       await context.SaveChangesAsync();
 
-      await context.SaveLogEntry("LogonUser", "Completed", "Information", executionInstanceId, clientIp);
+      await context.SaveLogEntry("ValidateUser", $"User {user.Id} validated", "Information", executionInstanceId, clientIp);
 
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-
-      return Ok(await ConvertDbUserToModel(user));
     }
-    catch (Exception ex)
+    else
     {
-      await context.SaveLogEntry("LogonUser", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
+      await context.SaveLogEntry("ValidateUser", $"Validation key does not match for user ID {user.Id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
     }
+
+    return Ok(await ConvertDbUserToModel(user));
+  }
+
+  [HttpPost("ForgotPassword/{emailAddress}", Name = "ForgotPassword")]
+  [SwaggerOperation("Forgot password")]
+  public async Task<ActionResult> ForgotPassword([SwaggerParameter("Email Address", Required = true)][FromRoute] string emailAddress)
+  {
+    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    if (string.IsNullOrWhiteSpace(emailAddress) || !IsValidEmailAddress(emailAddress))
+    {
+      await context.SaveLogEntry("ForgotPassword", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
+    }
+
+    var user = await context.User.FirstOrDefaultAsync(u => u.EmailAddress == emailAddress && u.Active && u.Status == "Validated");
+    if (user == null)
+    {
+      await context.SaveLogEntry("ForgotPassword", $"Email address {emailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    var validationKey = Guid.NewGuid().ToString();
+    var salt = user.Salt;
+    var hashedValidationKey = HashPasswordWithSalt(validationKey, salt);
+
+    user.ValidationKey = hashedValidationKey;
+    user.LastUpdateDate = DateTime.UtcNow;
+
+    await context.SaveChangesAsync();
+
+    await SendForgotPasswordEmail(validationKey, emailAddress);
+    await context.SaveLogEntry("ForgotPassword", $"Email sent to {emailAddress}", "Information", executionInstanceId, clientIp);
+
+    return Ok();
+  }
+
+  [HttpPost("ResetPassword", Name = "ResetPassword")]
+  [SwaggerOperation("Reset user password")]
+  public async Task<ActionResult<Models.User>> ResetPassword(ResetPasswordRequest request)
+  {
+    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
+    {
+      await context.SaveLogEntry("ResetPassword", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
+    }
+
+    if (string.IsNullOrWhiteSpace(request.ValidationKey))
+    {
+      await context.SaveLogEntry("ResetPassword", "Invalid validation key", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Validation Key is not valid");
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Password))
+    {
+      await context.SaveLogEntry("ResetPassword", "Invalid password", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Password is not valid");
+    }
+
+    var user = await context.User.Include(u => u.UserFavorites).Include(u => u.UserSettings)
+      .FirstOrDefaultAsync(u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Validated");
+    if (user == null)
+    {
+      await context.SaveLogEntry("ResetPassword", $"Email address {request.EmailAddress} does not exist in the database or is not in the correct state", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    var salt = user.Salt;
+    var hashedValidationKey = HashPasswordWithSalt(request.ValidationKey, salt);
+
+    if (user.ValidationKey == hashedValidationKey)
+    {
+      salt = GenerateSalt();
+      var hashedPassword = HashPasswordWithSalt(request.Password, salt);
+
+      user.Password = hashedPassword;
+      user.Salt = salt;
+      user.ValidationKey = null;
+      var sessionToken = Guid.NewGuid().ToString();
+      var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
+      user.SessionToken = hashedSessionToken;
+      user.LastUpdateDate = DateTime.UtcNow;
+
+      await context.SaveChangesAsync();
+
+      await context.SaveLogEntry("ResetPassword", $"User {user.Id} validated", "Information", executionInstanceId, clientIp);
+
+      Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+    }
+    else
+    {
+      await context.SaveLogEntry("ResetPassword", $"Validation key does not match for user ID {user.Id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    return Ok(await ConvertDbUserToModel(user));
+  }
+
+  [HttpDelete("", Name = "DeleteUser")]
+  [SwaggerOperation("Delete user")]
+  public async Task<ActionResult> DeleteUser(DeleteUserRequest request)
+  {
+    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
+    {
+      await context.SaveLogEntry("DeleteUser", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Password))
+    {
+      await context.SaveLogEntry("DeleteUser", "Invalid password", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Password is not valid");
+    }
+
+    var user = await context.User.FirstOrDefaultAsync(u => u.EmailAddress == request.EmailAddress && u.Active);
+    if (user == null)
+    {
+      await context.SaveLogEntry("DeleteUser", $"Email address {request.EmailAddress} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    var salt = user.Salt;
+    var hashedPassword = HashPasswordWithSalt(request.Password, salt);
+
+    if (user.Password != hashedPassword)
+    {
+      await context.SaveLogEntry("DeleteUser", $"Password does not match for email address {request.EmailAddress}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    user.Active = false;
+    user.LastUpdateDate = DateTime.UtcNow;
+    await context.SaveChangesAsync();
+
+    return Ok();
+  }
+
+  [HttpPost("Logon", Name = "LogonUser")]
+  [SwaggerOperation("User logon")]
+  public async Task<ActionResult<Models.User>> LogonUser(LogonUserRequest request)
+  {
+    HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    if (string.IsNullOrWhiteSpace(request.EmailAddress) || !IsValidEmailAddress(request.EmailAddress))
+    {
+      await context.SaveLogEntry("LogonUser", "Invalid email", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Email Address is not valid");
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Password))
+    {
+      await context.SaveLogEntry("LogonUser", "Invalid password", "Warning", executionInstanceId, clientIp);
+      return BadRequest("Password is not valid");
+    }
+
+    var user = context.User
+      .Include(u => u.UserSettings!)
+      .Include(u => u.UserFavorites!)
+      .FirstOrDefault(u => u.EmailAddress == request.EmailAddress && u.Active && u.Status == "Validated");
+
+    if (user == null)
+    {
+      await context.SaveLogEntry("LogonUser", $"Email address {request.EmailAddress} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    var salt = user.Salt;
+    var hashedPassword = HashPasswordWithSalt(request.Password, salt);
+
+    if (user.Password != hashedPassword)
+    {
+      await context.SaveLogEntry("LogonUser", $"Password does not match for email address {request.EmailAddress}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+
+    var sessionToken = Guid.NewGuid().ToString();
+    var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
+    user.SessionToken = hashedSessionToken;
+    user.LastUpdateDate = DateTime.UtcNow;
+
+    await context.SaveChangesAsync();
+
+    Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+
+    return Ok(await ConvertDbUserToModel(user));
   }
 
   [HttpGet("{id}", Name = "GetUser")]
@@ -490,55 +357,34 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
     [SwaggerParameter("Session token", Required = true)][FromHeader] string sessionToken)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    var user = context.User
+      .Include(u => u.UserSettings!)
+      .Include(u => u.UserFavorites!)
+      .FirstOrDefault(u => u.Id == id && u.Active && u.Status == "Validated");
+
+    if (user == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "GetUser", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetUser", $"Rate limit exceeded by {offendingIpAddress}",
-          "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("GetUser", "Started", "Information", executionInstanceId, clientIp);
-      
-      var user = context.User
-        .Include(u => u.UserSettings!)
-        .Include(u => u.UserFavorites!)
-        .FirstOrDefault(u => u.Id == id && u.Active && u.Status == "Validated");
-
-      if (user == null)
-      {
-        await context.SaveLogEntry("GetUser", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      var salt = user.Salt;
-      var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
-
-      if (user.SessionToken != hashedSessionToken)
-      {
-        await context.SaveLogEntry("GetUser", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      user.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("GetUser", "Completed", "Information", executionInstanceId, clientIp);
-
-      Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-
-      return Ok(await ConvertDbUserToModel(user));
+      await context.SaveLogEntry("GetUser", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
     }
-    catch (Exception ex)
+
+    var salt = user.Salt;
+    var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
+
+    if (user.SessionToken != hashedSessionToken)
     {
-      await context.SaveLogEntry("GetUser", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
+      await context.SaveLogEntry("GetUser", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
     }
+
+    user.LastUpdateDate = DateTime.UtcNow;
+
+    await context.SaveChangesAsync();
+
+    Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+
+    return Ok(await ConvertDbUserToModel(user));
   }
 
   [HttpPost("{id}/Favorites", Name = "AddUserFavorite")]
@@ -549,69 +395,50 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
       [SwaggerParameter("Session token", Required = true)][FromHeader] string sessionToken)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    var user = context.User.Include(u => u.UserFavorites!).FirstOrDefault(u =>
+      u.Id == id && u.Active && u.Status == "Validated");
+
+    if (user == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "AddUserFavorite", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("AddUserFavorite", $"Rate limit exceeded by {offendingIpAddress}",
-            "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
+      await context.SaveLogEntry("AddUserFavorite", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
 
-      await context.SaveLogEntry("AddUserFavorite", "Started", "Information", executionInstanceId, clientIp);
+    var salt = user.Salt;
+    var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
 
-      var user = context.User.Include(u => u.UserFavorites!).FirstOrDefault(u =>
-          u.Id == id && u.Active && u.Status == "Validated");
+    if (user.SessionToken != hashedSessionToken)
+    {
+      await context.SaveLogEntry("AddUserFavorite", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+    user.LastUpdateDate = DateTime.UtcNow;
 
-      if (user == null)
-      {
-        await context.SaveLogEntry("AddUserFavorite", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
+    await context.SaveChangesAsync();
 
-      var salt = user.Salt;
-      var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
-
-      if (user.SessionToken != hashedSessionToken)
-      {
-        await context.SaveLogEntry("AddUserFavorite", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-      user.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-      
-      var userFavorite = user.UserFavorites!.FirstOrDefault(um => um.Active && um.NextplaceId == request.NextplaceId);
-      if (userFavorite != null)
-      {
-        await context.SaveLogEntry("AddUserFavorite", $"Favorite {request.NextplaceId} already exists for user {user.Id}", "Warning", executionInstanceId, clientIp);
-        Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-        return Conflict();
-      }
-
-      user.UserFavorites!.Add(new Db.UserFavorite
-      {
-        Active = true,
-        CreateDate = DateTime.UtcNow,
-        LastUpdateDate = DateTime.UtcNow,
-        NextplaceId = request.NextplaceId,
-        UserId = user.Id
-      });
-
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("AddUserFavorite", "Completed", "Information", executionInstanceId, clientIp);
-
+    var userFavorite = user.UserFavorites!.FirstOrDefault(um => um.Active && um.NextplaceId == request.NextplaceId);
+    if (userFavorite != null)
+    {
+      await context.SaveLogEntry("AddUserFavorite", $"Favorite {request.NextplaceId} already exists for user {user.Id}", "Warning", executionInstanceId, clientIp);
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+      return Conflict();
+    }
 
-      return Ok();
-    }
-    catch (Exception ex)
+    user.UserFavorites!.Add(new Db.UserFavorite
     {
-      await context.SaveLogEntry("AddUserFavorite", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
+      Active = true,
+      CreateDate = DateTime.UtcNow,
+      LastUpdateDate = DateTime.UtcNow,
+      NextplaceId = request.NextplaceId,
+      UserId = user.Id
+    });
+
+    await context.SaveChangesAsync();
+
+    Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+
+    return Ok();
   }
   
   [HttpDelete("{id}/Favorites", Name = "DeleteUserFavorite")]
@@ -622,64 +449,45 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
       [SwaggerParameter("Session token", Required = true)][FromHeader] string sessionToken)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    var user = context.User.Include(u => u.UserFavorites!).FirstOrDefault(u =>
+      u.Id == id && u.Active && u.Status == "Validated");
+
+    if (user == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "DeleteUserFavorite", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("DeleteUserFavorite", $"Rate limit exceeded by {offendingIpAddress}",
-            "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
+      await context.SaveLogEntry("DeleteUserFavorite", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
 
-      await context.SaveLogEntry("DeleteUserFavorite", "Started", "Information", executionInstanceId, clientIp);
+    var salt = user.Salt;
+    var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
 
-      var user = context.User.Include(u => u.UserFavorites!).FirstOrDefault(u =>
-          u.Id == id && u.Active && u.Status == "Validated");
+    if (user.SessionToken != hashedSessionToken)
+    {
+      await context.SaveLogEntry("DeleteUserFavorite", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
 
-      if (user == null)
-      {
-        await context.SaveLogEntry("DeleteUserFavorite", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
+    user.LastUpdateDate = DateTime.UtcNow;
 
-      var salt = user.Salt;
-      var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
+    await context.SaveChangesAsync();
 
-      if (user.SessionToken != hashedSessionToken)
-      {
-        await context.SaveLogEntry("DeleteUserFavorite", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      user.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      var userFavorite = user.UserFavorites!.FirstOrDefault(um => um.Active && um.NextplaceId == request.NextplaceId);
-      if (userFavorite == null)
-      {
-        await context.SaveLogEntry("DeleteUserFavorite", $"Favorite {request.NextplaceId} does not exist for user {user.Id}", "Warning", executionInstanceId, clientIp);
-        Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-        return NotFound();
-      }
-
-      userFavorite.Active = false;
-      userFavorite.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("DeleteUserFavorite", "Completed", "Information", executionInstanceId, clientIp);
-
+    var userFavorite = user.UserFavorites!.FirstOrDefault(um => um.Active && um.NextplaceId == request.NextplaceId);
+    if (userFavorite == null)
+    {
+      await context.SaveLogEntry("DeleteUserFavorite", $"Favorite {request.NextplaceId} does not exist for user {user.Id}", "Warning", executionInstanceId, clientIp);
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+      return NotFound();
+    }
 
-      return Ok();
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("DeleteUserFavorite", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
+    userFavorite.Active = false;
+    userFavorite.LastUpdateDate = DateTime.UtcNow;
+
+    await context.SaveChangesAsync();
+
+    Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+
+    return Ok();
   }
   
   [HttpPost("{id}/Settings", Name = "AddUserSetting")]
@@ -690,70 +498,52 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
       [SwaggerParameter("Session token", Required = true)][FromHeader] string sessionToken)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+
+    var user = context.User.Include(u => u.UserSettings!).FirstOrDefault(u =>
+      u.Id == id && u.Active && u.Status == "Validated");
+
+    if (user == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "AddUserSetting", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("AddUserSetting", $"Rate limit exceeded by {offendingIpAddress}",
-            "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
+      await context.SaveLogEntry("AddUserSetting", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
 
-      await context.SaveLogEntry("AddUserSetting", "Started", "Information", executionInstanceId, clientIp);
+    var salt = user.Salt;
+    var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
 
-      var user = context.User.Include(u => u.UserSettings!).FirstOrDefault(u =>
-          u.Id == id && u.Active && u.Status == "Validated");
+    if (user.SessionToken != hashedSessionToken)
+    {
+      await context.SaveLogEntry("AddUserSetting", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
+    user.LastUpdateDate = DateTime.UtcNow;
 
-      if (user == null)
-      {
-        await context.SaveLogEntry("AddUserSetting", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
+    await context.SaveChangesAsync();
 
-      var salt = user.Salt;
-      var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
-
-      if (user.SessionToken != hashedSessionToken)
-      {
-        await context.SaveLogEntry("AddUserSetting", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-      user.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      var userSetting = user.UserSettings!.FirstOrDefault(um => um.Active && um.SettingName == request.SettingName);
-      if (userSetting != null)
-      {
-        await context.SaveLogEntry("AddUserSetting", $"Setting {request.SettingName} already exists for user {user.Id}", "Warning", executionInstanceId, clientIp);
-        Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-        return Conflict();
-      }
-
-      user.UserSettings!.Add(new Db.UserSetting
-      {
-        Active = true,
-        CreateDate = DateTime.UtcNow,
-        LastUpdateDate = DateTime.UtcNow,
-        SettingName = request.SettingName,
-        SettingValue = request.SettingValue,
-        UserId = user.Id
-      });
-
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("AddUserSetting", "Completed", "Information", executionInstanceId, clientIp);
-
+    var userSetting = user.UserSettings!.FirstOrDefault(um => um.Active && um.SettingName == request.SettingName);
+    if (userSetting != null)
+    {
+      await context.SaveLogEntry("AddUserSetting", $"Setting {request.SettingName} already exists for user {user.Id}", "Warning", executionInstanceId, clientIp);
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+      return Conflict();
+    }
 
-      return Ok();
-    }
-    catch (Exception ex)
+    user.UserSettings!.Add(new Db.UserSetting
     {
-      await context.SaveLogEntry("AddUserSetting", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
+      Active = true,
+      CreateDate = DateTime.UtcNow,
+      LastUpdateDate = DateTime.UtcNow,
+      SettingName = request.SettingName,
+      SettingValue = request.SettingValue,
+      UserId = user.Id
+    });
+
+    await context.SaveChangesAsync();
+
+    Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+
+    return Ok();
   }
 
   [HttpDelete("{id}/Settings", Name = "DeleteUserSetting")]
@@ -764,64 +554,45 @@ public class UserController(AppDbContext context, IConfiguration configuration, 
       [SwaggerParameter("Session token", Required = true)][FromHeader] string sessionToken)
   {
     HttpContext.GetIpAddressesFromHeader(out _, out var clientIp);
-    var executionInstanceId = Guid.NewGuid().ToString();
-    try
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    var user = context.User.Include(u => u.UserSettings!).FirstOrDefault(u =>
+      u.Id == id && u.Active && u.Status == "Validated");
+
+    if (user == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, configuration, "DeleteUserSetting", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("DeleteUserSetting", $"Rate limit exceeded by {offendingIpAddress}",
-            "Warning", executionInstanceId, clientIp);
-        return StatusCode(429);
-      }
+      await context.SaveLogEntry("DeleteUserSetting", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
 
-      await context.SaveLogEntry("DeleteUserSetting", "Started", "Information", executionInstanceId, clientIp);
+    var salt = user.Salt;
+    var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
 
-      var user = context.User.Include(u => u.UserSettings!).FirstOrDefault(u =>
-          u.Id == id && u.Active && u.Status == "Validated");
+    if (user.SessionToken != hashedSessionToken)
+    {
+      await context.SaveLogEntry("DeleteUserSetting", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
+      return Unauthorized();
+    }
 
-      if (user == null)
-      {
-        await context.SaveLogEntry("DeleteUserSetting", $"User ID {id} does not exist", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
+    user.LastUpdateDate = DateTime.UtcNow;
 
-      var salt = user.Salt;
-      var hashedSessionToken = HashPasswordWithSalt(sessionToken, salt);
+    await context.SaveChangesAsync();
 
-      if (user.SessionToken != hashedSessionToken)
-      {
-        await context.SaveLogEntry("DeleteUserSetting", $"Session token does not match for User ID {id}", "Warning", executionInstanceId, clientIp);
-        return Unauthorized();
-      }
-
-      user.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      var userSetting = user.UserSettings!.FirstOrDefault(um => um.Active && um.SettingName == request.SettingName);
-      if (userSetting == null)
-      {
-        await context.SaveLogEntry("DeleteUserSetting", $"Setting {request.SettingName} does not exist for user {user.Id}", "Warning", executionInstanceId, clientIp);
-        Response.Headers.Append("Nextplace-Session-Token", sessionToken);
-        return NotFound();
-      }
-
-      userSetting.Active = false;
-      userSetting.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("DeleteUserSetting", "Completed", "Information", executionInstanceId, clientIp);
-
+    var userSetting = user.UserSettings!.FirstOrDefault(um => um.Active && um.SettingName == request.SettingName);
+    if (userSetting == null)
+    {
+      await context.SaveLogEntry("DeleteUserSetting", $"Setting {request.SettingName} does not exist for user {user.Id}", "Warning", executionInstanceId, clientIp);
       Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+      return NotFound();
+    }
 
-      return Ok();
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("DeleteUserSetting", ex, executionInstanceId, clientIp);
-      return StatusCode(500);
-    }
+    userSetting.Active = false;
+    userSetting.LastUpdateDate = DateTime.UtcNow;
+
+    await context.SaveChangesAsync();
+
+    Response.Headers.Append("Nextplace-Session-Token", sessionToken);
+
+    return Ok();
   }
 
   private async Task SendForgotPasswordEmail(string validationKey, string emailAddress)

@@ -500,6 +500,13 @@ as
 	
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'New entries added', 'Information', getutcdate(), @executionInstanceId)
+ 
+  delete		pp
+	from		dbo.PropertyPrediction pp
+	where		pp.createDate < dateadd(dd, -1, getutcdate())
+	
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Property predictions deleted', 'Information', getutcdate(), @executionInstanceId)
 
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)

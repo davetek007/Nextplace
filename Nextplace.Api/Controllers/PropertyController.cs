@@ -14,7 +14,6 @@ using Nextplace.Api.Helpers;
 using System.Text;
 using PropertyPredictionStats = Nextplace.Api.Models.PropertyPredictionStats;
 using Azure.Identity;
-using Microsoft.Graph.Models.ExternalConnectors;
 using Microsoft.Graph.Models;
 using Microsoft.Graph;
 using Microsoft.Graph.Users.Item.SendMail;
@@ -30,22 +29,13 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
   [SwaggerOperation("Sample properties per market")]
   public async Task<ActionResult<List<MarketSample>>> Sample([FromQuery] int sampleSize)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, config, "SampleProperties", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("SampleProperties", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+    await context.SaveLogEntry("SampleProperties", "SampleSize: " + sampleSize, "Information", executionInstanceId);
 
-      await context.SaveLogEntry("SampleProperties", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("SampleProperties", "SampleSize: " + sampleSize, "Information", executionInstanceId);
+    sampleSize = Math.Clamp(sampleSize, 1, 500);
 
-      sampleSize = Math.Clamp(sampleSize, 1, 500);
-
-      var sqlQuery = $@"
+    var sqlQuery = $@"
                  with r as (
                    select	id, market, country, longitude, latitude, listingPrice, listingDate, row_number() over (partition by market, country order by newid()) as row
                    from	dbo.Property)
@@ -53,420 +43,306 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
                  from	r
                 where	row <= {sampleSize};";
 
-      var query = context.Property.FromSqlRaw(sqlQuery);
-      var dict = new Dictionary<string, MarketSample>();
+    var query = context.Property.FromSqlRaw(sqlQuery);
+    var dict = new Dictionary<string, MarketSample>();
 
-      var results = await query.ToListAsync();
+    var results = await query.ToListAsync();
 
-      foreach (var result in results)
+    foreach (var result in results)
+    {
+      var daysOnMarket = (int)(DateTime.UtcNow - result.ListingDate).TotalDays;
+
+      var pi = new PropertyInfo(
+        result.Id,
+        result.Longitude,
+        result.Latitude,
+        daysOnMarket,
+        result.ListingPrice);
+
+      var key = result.Market.ToLowerInvariant();
+      if (!dict.ContainsKey(key))
       {
-        var daysOnMarket = (int)(DateTime.UtcNow - result.ListingDate).TotalDays;
-
-        var pi = new PropertyInfo(
-            result.Id,
-            result.Longitude,
-            result.Latitude,
-            daysOnMarket,
-            result.ListingPrice);
-
-        var key = result.Market.ToLowerInvariant();
-        if (!dict.ContainsKey(key))
-        {
-          dict.Add(key, new MarketSample(result.Market, result.Country, []));
-        }
-
-        dict[key].Properties.Add(pi);
+        dict.Add(key, new MarketSample(result.Market, result.Country, []));
       }
 
-      Response.AppendCorsHeaders();
+      dict[key].Properties.Add(pi);
+    }
 
-      await context.SaveLogEntry("SampleProperties", "Completed", "Information", executionInstanceId);
-      return Ok(dict.Values.ToList());
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("SampleProperties", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+    return Ok(dict.Values.ToList());
   }
 
   [HttpGet("Training", Name = "GetTrainingData")]
   [SwaggerOperation("Get property training data")]
   public async Task<ActionResult<List<Property>>> GetTrainingData()
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    const int resultCountPerMarket = 500;
+
+    List<Property> properties;
+    const string cacheKey = "GetTrainingData";
+    if (cache.TryGetValue(cacheKey, out var cachedData))
     {
-      const int resultCountPerMarket = 500;
-      if (!HttpContext.CheckRateLimit(cache, config, "GetTrainingData", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetTrainingData", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("GetTrainingData", "Started", "Information", executionInstanceId);
-
-      List<Property> properties;
-      const string cacheKey = "GetTrainingData";
-      if (cache.TryGetValue(cacheKey, out var cachedData))
-      {
-        properties = (List<Property>)cachedData!;
-        await context.SaveLogEntry("GetTrainingData", "Obtained from cache", "Information", executionInstanceId);
-      }
-      else
-      {
-        List<PropertyContext> allProperties = [];
-        var markets = await context.Market.Select(m => m.Name).ToListAsync();
-
-        foreach (var market in markets)
-        { 
-          var propertiesForMarket = await context.Property
-            .Where(p => p.Market == market && p.SalePrice != null)
-            .OrderByDescending(p => p.LastUpdateDate)
-            .Take(resultCountPerMarket)
-            .ToListAsync();
-
-          allProperties.AddRange(propertiesForMarket);
-        }
-
-        properties = allProperties.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
-                    data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
-                    data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
-                    data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
-                    data.SaleDate, data.SalePrice, data.CreateDate, data.LastUpdateDate, data.Active, data.Country)
-        { Predictions = [] })
-            .ToList();
-
-        await context.SaveLogEntry("GetTrainingData", "Obtained from DB", "Information", executionInstanceId);
-
-        cache.Set(cacheKey, properties, TimeSpan.FromHours(12));
-      }
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("GetTrainingData", "Completed", "Information", executionInstanceId);
-      return Ok(properties);
+      properties = (List<Property>)cachedData!;
+      await context.SaveLogEntry("GetTrainingData", "Obtained from cache", "Information", executionInstanceId);
     }
-    catch (Exception ex)
+    else
     {
-      await context.SaveLogEntry("GetTrainingData", ex, executionInstanceId);
-      return StatusCode(500);
+      List<PropertyContext> allProperties = [];
+      var markets = await context.Market.Select(m => m.Name).ToListAsync();
+
+      foreach (var market in markets)
+      {
+        var propertiesForMarket = await context.Property
+          .Where(p => p.Market == market && p.SalePrice != null)
+          .OrderByDescending(p => p.LastUpdateDate)
+          .Take(resultCountPerMarket)
+          .ToListAsync();
+
+        allProperties.AddRange(propertiesForMarket);
+      }
+
+      properties = allProperties.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
+                  data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
+                  data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
+                  data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
+                  data.SaleDate, data.SalePrice, data.CreateDate, data.LastUpdateDate, data.Active, data.Country)
+      { Predictions = [] })
+          .ToList();
+
+      await context.SaveLogEntry("GetTrainingData", "Obtained from DB", "Information", executionInstanceId);
+
+      cache.Set(cacheKey, properties, TimeSpan.FromHours(12));
     }
+
+    return Ok(properties);
   }
 
   [HttpGet("Current", Name = "GetCurrentProperties")]
   [SwaggerOperation("Get current properties")]
   public async Task<ActionResult<List<Property>>> GetCurrentProperties([FromQuery] int? sampleSize, [FromQuery] double? minLatitude, [FromQuery] double? minLongitude, [FromQuery] double? maxLatitude, [FromQuery] double? maxLongitude)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    if (sampleSize.HasValue)
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "GetCurrentProperties", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetCurrentProperties", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+      sampleSize = Math.Clamp(sampleSize.Value, 1, 500);
+    }
 
-      await context.SaveLogEntry("GetCurrentProperties", "Started", "Information", executionInstanceId);
+    List<Property> properties;
+    var cacheKey = "GetCurrentProperties" + (sampleSize.HasValue ? sampleSize.Value : "") +
+                   (minLatitude.HasValue ? minLatitude.Value : "") + (minLongitude.HasValue ? minLongitude.Value : "") +
+                   (maxLatitude.HasValue ? maxLatitude.Value : "") + (maxLongitude.HasValue ? maxLongitude.Value : "");
 
+    if (cache.TryGetValue(cacheKey, out var cachedData))
+    {
+      properties = (List<Property>)cachedData!;
+      await context.SaveLogEntry("GetCurrentProperties", "Obtained from cache", "Information", executionInstanceId);
+    }
+    else
+    {
+      IQueryable<PropertyContext> query;
       if (sampleSize.HasValue)
       {
-        sampleSize = Math.Clamp(sampleSize.Value, 1, 500);
-      }
-
-      List<Property> properties;
-      var cacheKey = "GetCurrentProperties" + (sampleSize.HasValue ? sampleSize.Value : "") +
-                     (minLatitude.HasValue ? minLatitude.Value : "") + (minLongitude.HasValue ? minLongitude.Value : "") +
-                     (maxLatitude.HasValue ? maxLatitude.Value : "") + (maxLongitude.HasValue ? maxLongitude.Value : "");
-      
-      if (cache.TryGetValue(cacheKey, out var cachedData))
-      {
-        properties = (List<Property>)cachedData!;
-        await context.SaveLogEntry("GetCurrentProperties", "Obtained from cache", "Information", executionInstanceId);
+        query = context.Property
+          .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5)).OrderBy(_ => Guid.NewGuid())
+          .Take(sampleSize.Value);
       }
       else
       {
-        IQueryable<PropertyContext> query;
-        if (sampleSize.HasValue)
-        {
-          query = context.Property
-            .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5)).OrderBy(_ => Guid.NewGuid())
-            .Take(sampleSize.Value);
-        }
-        else
-        {
-          query = context.Property
-            .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5));
-        }
-        
-        if (minLatitude.HasValue && minLongitude.HasValue && maxLatitude.HasValue && maxLongitude.HasValue)
-        {
-          query = query.Where(p =>
-            p.Latitude >= minLatitude && p.Latitude <= maxLatitude && 
-            p.Longitude >= minLongitude && p.Longitude <= maxLongitude);
-        }
-
-        var results = await query.ToListAsync();
-
-        properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
-                    data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
-                    data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
-                    data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
-                    data.SaleDate, data.SalePrice, data.CreateDate, data.LastUpdateDate, data.Active, data.Country)
-        { Predictions = [] })
-            .ToList();
-
-        await context.SaveLogEntry("GetCurrentProperties", "Obtained from DB", "Information", executionInstanceId);
-
-        cache.Set(cacheKey, properties, TimeSpan.FromHours(12));
+        query = context.Property
+          .Where(p => p.ListingDate > DateTime.UtcNow.Date.AddDays(-5));
       }
 
-      Response.AppendCorsHeaders();
+      if (minLatitude.HasValue && minLongitude.HasValue && maxLatitude.HasValue && maxLongitude.HasValue)
+      {
+        query = query.Where(p =>
+          p.Latitude >= minLatitude && p.Latitude <= maxLatitude &&
+          p.Longitude >= minLongitude && p.Longitude <= maxLongitude);
+      }
 
-      await context.SaveLogEntry("GetCurrentProperties", "Completed", "Information", executionInstanceId);
-      return Ok(properties);
+      var results = await query.ToListAsync();
+
+      properties = results.Select(data => new Property(data.Id, data.PropertyId, data.NextplaceId,
+                  data.ListingId, data.Longitude, data.Latitude, data.Market, data.City, data.State, data.ZipCode,
+                  data.Address, data.ListingDate, data.ListingPrice, data.NumberOfBeds, data.NumberOfBaths,
+                  data.SquareFeet, data.LotSize, data.YearBuilt, data.PropertyType, data.LastSaleDate, data.HoaDues,
+                  data.SaleDate, data.SalePrice, data.CreateDate, data.LastUpdateDate, data.Active, data.Country)
+      { Predictions = [] })
+          .ToList();
+
+      await context.SaveLogEntry("GetCurrentProperties", "Obtained from DB", "Information", executionInstanceId);
+
+      cache.Set(cacheKey, properties, TimeSpan.FromHours(12));
     }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("GetCurrentProperties", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+
+    return Ok(properties);
   }
 
   [HttpGet("Valuations", Name = "GetPropertyValuations")]
   [SwaggerOperation("Get property valuation requests")]
   public async Task<ActionResult<List<Models.PropertyValuation>>> GetPropertyValuations()
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    var results = await context.PropertyValuation.Where(p => p.RequestStatus == "New" && p.Active).ToListAsync();
+
+    Response.Headers.Append("Nextplace-Search-Total-Count", results.Count.ToString());
+
+    await context.SaveLogEntry("GetPropertyValuations", $"{results.Count} properties valuations found", "Information", executionInstanceId);
+
+    var propertyValuations = new List<Models.PropertyValuation>();
+    foreach (var data in results)
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "GetPropertyValuations", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetPropertyValuations", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+      var proposedListingPrice = data.EstimatedListingPrice ?? data.ProposedListingPrice;
 
-      await context.SaveLogEntry("GetPropertyValuations", "Started", "Information", executionInstanceId);
+      var propertyValuation = new Models.PropertyValuation(
+        data.Id,
+        data.NextplaceId,
+        data.Longitude,
+        data.Latitude,
+        data.City,
+        data.State,
+        data.ZipCode,
+        data.Address,
+        data.NumberOfBeds,
+        data.NumberOfBaths,
+        data.SquareFeet,
+        data.LotSize,
+        data.YearBuilt,
+        data.HoaDues,
+        data.PropertyType,
+        proposedListingPrice,
+        data.CreateDate,
+        data.LastUpdateDate,
+        data.Active,
+        data.Country,
+        data.EstimatedListingPrice);
 
-      var results = await context.PropertyValuation.Where(p => p.RequestStatus == "New" && p.Active).ToListAsync();
-
-      Response.Headers.Append("Nextplace-Search-Total-Count", results.Count.ToString());
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("GetPropertyValuations", $"{results.Count} properties valuations found", "Information", executionInstanceId);
-
-      var propertyValuations = new List<Models.PropertyValuation>();
-      foreach (var data in results)
-      {
-        var proposedListingPrice = data.EstimatedListingPrice ?? data.ProposedListingPrice;
-        
-        var propertyValuation = new Models.PropertyValuation(
-            data.Id,
-            data.NextplaceId,
-            data.Longitude,
-            data.Latitude,
-            data.City,
-            data.State,
-            data.ZipCode,
-            data.Address,
-            data.NumberOfBeds,
-            data.NumberOfBaths,
-            data.SquareFeet,
-            data.LotSize,
-            data.YearBuilt,
-            data.HoaDues,
-            data.PropertyType,
-            proposedListingPrice,
-            data.CreateDate,
-            data.LastUpdateDate,
-            data.Active,
-            data.Country, 
-            data.EstimatedListingPrice);
-
-        propertyValuations.Add(propertyValuation);
-      }
-
-      await context.SaveLogEntry("GetPropertyValuations", "Completed", "Information", executionInstanceId);
-      return Ok(propertyValuations);
+      propertyValuations.Add(propertyValuation);
     }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("GetPropertyValuations", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+
+    return Ok(propertyValuations);
   }
 
   [HttpPost("Valuation", Name = "PostPropertyValuation")]
   [SwaggerOperation("Post a property valuation request")]
   public async Task<ActionResult> PostPropertyValuation(PostPropertyValuationRequest request)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    await context.SaveLogEntry("PostPropertyValuation", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+
+    var searchString = request.Address + " " + request.City + " " + request.State + " " + request.ZipCode;
+    searchString = searchString.Replace(" ", "-");
+
+    float? estimatedListingPrice = null;
+    var estimates = await GetEstimatedListingPriceForProperty(searchString);
+
+    if (estimates != null && estimates.Count != 0)
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "PostPropertyValuation", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("PostPropertyValuation", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("PostPropertyValuation", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("PostPropertyValuation", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
-
-      var searchString = request.Address + " " + request.City + " " + request.State + " " + request.ZipCode;
-      searchString = searchString.Replace(" ", "-");
-
-      float? estimatedListingPrice = null;
-      var estimates = await GetEstimatedListingPriceForProperty(searchString);
-
-      if (estimates != null && estimates.Count != 0)
-      {
-        estimatedListingPrice = estimates.OrderByDescending(e => e.Timestamp).First().Value;
-      }
-
-      var dbEntry = new PropertyValuation
-      {
-        RequestStatus = "New",
-        NextplaceId = $"PVR-{Guid.NewGuid()}",
-        Active = true,
-        Address = request.Address,
-        City = request.City,
-        Country = request.Country ?? "United States",
-        CreateDate = DateTime.UtcNow,
-        LastUpdateDate = DateTime.UtcNow,
-        Latitude = request.Latitude,
-        Longitude = request.Longitude,
-        NumberOfBaths = request.NumberOfBaths,
-        NumberOfBeds = request.NumberOfBeds,
-        State = request.State,
-        ZipCode = request.ZipCode,
-        YearBuilt = request.YearBuilt,
-        HoaDues = request.HoaDues,
-        RequestorEmailAddress = request.RequestorEmailAddress,
-        PropertyType = request.PropertyType,
-        ProposedListingPrice = request.ProposedListingPrice,
-        EstimatedListingPrice = estimatedListingPrice
-      };
-
-      context.PropertyValuation.Add(dbEntry);
-
-      await context.SaveChangesAsync();
-
-      await context.SaveLogEntry("PostPropertyValuation", $"Saving property valuation {dbEntry.NextplaceId} to DB", "Information", executionInstanceId);
-      await context.SaveLogEntry("PostPropertyValuation", "Completed", "Information", executionInstanceId);
-
-      return CreatedAtAction(nameof(PostPropertyValuation), new { id = dbEntry.NextplaceId }, dbEntry);
+      estimatedListingPrice = estimates.OrderByDescending(e => e.Timestamp).First().Value;
     }
-    catch (Exception ex)
+
+    var dbEntry = new PropertyValuation
     {
-      await context.SaveLogEntry("PostPropertyValuation", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+      RequestStatus = "New",
+      NextplaceId = $"PVR-{Guid.NewGuid()}",
+      Active = true,
+      Address = request.Address,
+      City = request.City,
+      Country = request.Country ?? "United States",
+      CreateDate = DateTime.UtcNow,
+      LastUpdateDate = DateTime.UtcNow,
+      Latitude = request.Latitude,
+      Longitude = request.Longitude,
+      NumberOfBaths = request.NumberOfBaths,
+      NumberOfBeds = request.NumberOfBeds,
+      State = request.State,
+      ZipCode = request.ZipCode,
+      YearBuilt = request.YearBuilt,
+      HoaDues = request.HoaDues,
+      RequestorEmailAddress = request.RequestorEmailAddress,
+      PropertyType = request.PropertyType,
+      ProposedListingPrice = request.ProposedListingPrice,
+      EstimatedListingPrice = estimatedListingPrice
+    };
+
+    context.PropertyValuation.Add(dbEntry);
+
+    await context.SaveChangesAsync();
+
+    await context.SaveLogEntry("PostPropertyValuation", $"Saving property valuation {dbEntry.NextplaceId} to DB", "Information", executionInstanceId);
+
+    return CreatedAtAction(nameof(PostPropertyValuation), new { id = dbEntry.NextplaceId }, dbEntry);
   }
 
   [HttpPost("Share", Name = "PostPropertyShare")]
   [SwaggerOperation("Post a property share request")]
   public async Task<ActionResult> PostPropertyShare(PostPropertyShareRequest request)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    await context.SaveLogEntry("PostPropertyShare", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+
+    var property =
+      await context.Property.FirstOrDefaultAsync(p => p.NextplaceId == request.NextplaceId && p.Active);
+
+    if (property == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "PostPropertyShare", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("PostPropertyShare", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("PostPropertyShare", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("PostPropertyShare", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
-
-      var property =
-        await context.Property.FirstOrDefaultAsync(p => p.NextplaceId == request.NextplaceId && p.Active);
-
-      if (property == null)
-      {
-        await context.SaveLogEntry("PostPropertyShare", $"Property with NextplaceId {request.NextplaceId} not found", "Warning", executionInstanceId);
-        return StatusCode(404);
-      }
-
-      var shareRef = Guid.NewGuid().ToString();
-
-      var dbEntry = new PropertyShare
-      {
-        PropertyId = property.Id,
-        Active = true,
-        SenderEmailAddress = request.SenderEmailAddress,
-        ReceiverEmailAddress = request.ReceiverEmailAddress,
-        Message = request.Message,
-        CreateDate = DateTime.UtcNow,
-        LastUpdateDate = DateTime.UtcNow,
-        ShareRef = shareRef,
-        ViewCount = 0
-      };
-
-      context.PropertyShare.Add(dbEntry);
-
-      await context.SaveChangesAsync();
-
-      await SendPropertyShareEmail(request.NextplaceId, shareRef, request.SenderEmailAddress, request.ReceiverEmailAddress, request.Message);
-
-      await context.SaveLogEntry("PostPropertyShare", $"Saving property share for {request.NextplaceId} to DB", "Information", executionInstanceId);
-      await context.SaveLogEntry("PostPropertyShare", "Completed", "Information", executionInstanceId);
-
-      return Ok();
+      await context.SaveLogEntry("PostPropertyShare", $"Property with NextplaceId {request.NextplaceId} not found", "Warning", executionInstanceId);
+      return StatusCode(404);
     }
-    catch (Exception ex)
+
+    var shareRef = Guid.NewGuid().ToString();
+
+    var dbEntry = new PropertyShare
     {
-      await context.SaveLogEntry("PostPropertyShare", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+      PropertyId = property.Id,
+      Active = true,
+      SenderEmailAddress = request.SenderEmailAddress,
+      ReceiverEmailAddress = request.ReceiverEmailAddress,
+      Message = request.Message,
+      CreateDate = DateTime.UtcNow,
+      LastUpdateDate = DateTime.UtcNow,
+      ShareRef = shareRef,
+      ViewCount = 0
+    };
+
+    context.PropertyShare.Add(dbEntry);
+
+    await context.SaveChangesAsync();
+
+    await SendPropertyShareEmail(request.NextplaceId, shareRef, request.SenderEmailAddress, request.ReceiverEmailAddress, request.Message);
+
+    await context.SaveLogEntry("PostPropertyShare", $"Saving property share for {request.NextplaceId} to DB", "Information", executionInstanceId);
+
+    return Ok();
   }
 
   [HttpPost("Share/View", Name = "PostPropertyShareView")]
   [SwaggerOperation("Post a property share view request")]
   public async Task<ActionResult> PostPropertyShareView(PostPropertyShareViewRequest request)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    await context.SaveLogEntry("PostPropertyShareView", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
+
+    var propertyShare =
+      await context.PropertyShare.FirstOrDefaultAsync(p => p.ShareRef == request.ShareRef && p.Active);
+
+    if (propertyShare == null)
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "PostPropertyShareView", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("PostPropertyShareView", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("PostPropertyShareView", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("PostPropertyShareView", "Request: " + JsonConvert.SerializeObject(request), "Information", executionInstanceId);
-
-      var propertyShare =
-        await context.PropertyShare.FirstOrDefaultAsync(p => p.ShareRef == request.ShareRef && p.Active);
-
-      if (propertyShare == null)
-      {
-        await context.SaveLogEntry("PostPropertyShareView", $"Property Share with Share Ref {request.ShareRef} not found", "Warning", executionInstanceId);
-        return StatusCode(404);
-      }
-
-      propertyShare.ViewCount++;
-      propertyShare.LastUpdateDate = DateTime.UtcNow;
-
-      await context.SaveChangesAsync();
-      
-      await context.SaveLogEntry("PostPropertyShareView", "Completed", "Information", executionInstanceId);
-
-      return Ok();
+      await context.SaveLogEntry("PostPropertyShareView", $"Property Share with Share Ref {request.ShareRef} not found", "Warning", executionInstanceId);
+      return StatusCode(404);
     }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("PostPropertyShareView", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+
+    propertyShare.ViewCount++;
+    propertyShare.LastUpdateDate = DateTime.UtcNow;
+
+    await context.SaveChangesAsync();
+
+    return Ok();
   }
 
   public class Estimate
@@ -554,97 +430,57 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
   [SwaggerOperation("Get sales time series")]
   public async Task<ActionResult<List<Property>>> SalesTimeSeries([FromQuery] DateTime startDate, [FromQuery] DateTime endDate, [FromQuery] int minimumPredictionCount)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    object data;
+    var cacheKey = $"SalesTimeSeries{startDate:s}{endDate:s}{minimumPredictionCount}";
+
+    if (cache.TryGetValue(cacheKey, out var cachedData))
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "SalesTimeSeries", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("SalesTimeSeries", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("SalesTimeSeries", "Started", "Information", executionInstanceId);
-
-      object data;
-      var cacheKey = $"SalesTimeSeries{startDate:s}{endDate:s}{minimumPredictionCount}";
-
-      if (cache.TryGetValue(cacheKey, out var cachedData))
-      {
-        data = cachedData!;
-        await context.SaveLogEntry("SalesTimeSeries", "Obtained from cache", "Information", executionInstanceId);
-      }
-      else
-      {
-        data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
-                && p.PredictionStats!.Any() && p.PredictionStats!.First().NumPredictions >=
-                minimumPredictionCount)
-            .GroupBy(p => p.SaleDate!.Value.Date)
-            .Select(g => new { SaleDate = g.Key, Count = g.Count() }).ToListAsync();
-
-        cache.Set(cacheKey, data, TimeSpan.FromHours(12));
-      }
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("SalesTimeSeries", "Completed", "Information", executionInstanceId);
-      return Ok(data);
+      data = cachedData!;
+      await context.SaveLogEntry("SalesTimeSeries", "Obtained from cache", "Information", executionInstanceId);
     }
-    catch (Exception ex)
+    else
     {
-      await context.SaveLogEntry("SalesTimeSeries", ex, executionInstanceId);
-      return StatusCode(500);
+      data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
+                                                                       && p.PredictionStats!.Any() && p.PredictionStats!.First().NumPredictions >=
+                                                                       minimumPredictionCount)
+        .GroupBy(p => p.SaleDate!.Value.Date)
+        .Select(g => new { SaleDate = g.Key, Count = g.Count() }).ToListAsync();
+
+      cache.Set(cacheKey, data, TimeSpan.FromHours(12));
     }
+
+    return Ok(data);
   }
 
   [HttpGet("MarketPerformance", Name = "MarketPerformance")]
   [SwaggerOperation("Get market performance")]
   public async Task<ActionResult<List<Property>>> MarketPerformance([FromQuery] DateTime startDate, [FromQuery] DateTime endDate, [FromQuery] int minimumPredictionCount)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
+    object data;
+    var cacheKey = $"MarketPerformance{startDate:s}{endDate:s}{minimumPredictionCount}";
+
+    if (cache.TryGetValue(cacheKey, out var cachedData))
     {
-      if (!HttpContext.CheckRateLimit(cache, config, "MarketPerformance", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("MarketPerformance", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("MarketPerformance", "Started", "Information", executionInstanceId);
-
-
-      object data;
-      var cacheKey = $"MarketPerformance{startDate:s}{endDate:s}{minimumPredictionCount}";
-
-      if (cache.TryGetValue(cacheKey, out var cachedData))
-      {
-        data = cachedData!;
-        await context.SaveLogEntry("MarketPerformance", "Obtained from cache", "Information", executionInstanceId);
-      }
-      else
-      {
-        data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
-                                                                         && p.PredictionStats!.Any() &&
-                                                                         p.PredictionStats!.First().NumPredictions >=
-                                                                         minimumPredictionCount)
-          .GroupBy(p => p.Market)
-          .Select(g => new { Market = g.Key, Count = g.Count() }).ToListAsync();
-
-        cache.Set(cacheKey, data, TimeSpan.FromHours(12));
-      }
-
-      Response.AppendCorsHeaders();
-
-
-      await context.SaveLogEntry("MarketPerformance", "Completed", "Information", executionInstanceId);
-      return Ok(data);
+      data = cachedData!;
+      await context.SaveLogEntry("MarketPerformance", "Obtained from cache", "Information", executionInstanceId);
     }
-    catch (Exception ex)
+    else
     {
-      await context.SaveLogEntry("MarketPerformance", ex, executionInstanceId);
-      return StatusCode(500);
+      data = await context.Property.Where(p => p.SaleDate >= startDate && p.SaleDate <= endDate
+                                                                       && p.PredictionStats!.Any() &&
+                                                                       p.PredictionStats!.First().NumPredictions >=
+                                                                       minimumPredictionCount)
+        .GroupBy(p => p.Market)
+        .Select(g => new { Market = g.Key, Count = g.Count() }).ToListAsync();
+
+      cache.Set(cacheKey, data, TimeSpan.FromHours(12));
     }
+
+    return Ok(data);
   }
 
   [HttpGet("Search", Name = "SearchProperties")]
@@ -652,146 +488,108 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
   public async Task<ActionResult<List<Property>>> Search([FromQuery] PropertyFilter filter)
   {
     filter.TopPredictionCount = Math.Clamp(filter.TopPredictionCount, 0, 10);
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
+    await context.SaveLogEntry("SearchProperties", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
 
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, config, "SearchProperties", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("SearchProperties", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+    filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
 
-      await context.SaveLogEntry("SearchProperties", "Started", "Information", executionInstanceId);
-      await context.SaveLogEntry("SearchProperties", "Filter: " + JsonConvert.SerializeObject(filter), "Information", executionInstanceId);
+    var query = context.Property
+      .Include(tg => tg.EstimateStats)
+      .Include(tg => tg.PredictionStats)
+      .AsQueryable();
 
-      filter.ItemsPerPage = Math.Clamp(filter.ItemsPerPage, 1, 500);
+    query = ApplyDateFilters(query, filter);
+    query = ApplyStringFilters(query, filter);
+    query = ApplyMarketFilter(query, filter);
+    query = ApplyCoordinateFilters(query, filter);
+    query = ApplyAwaitingResultFilter(query, filter);
+    query = ApplySortOrder(query, filter.SortOrder);
+    query = ApplyMinPredictionsFilter(query, filter);
 
-      var query = context.Property
-        .Include(tg => tg.EstimateStats)
-        .Include(tg => tg.PredictionStats)
-          .AsQueryable();
+    var totalCount = await query.CountAsync();
+    Response.Headers.Append("Nextplace-Search-Total-Count", totalCount.ToString());
 
-      query = ApplyDateFilters(query, filter);
-      query = ApplyStringFilters(query, filter);
-      query = ApplyMarketFilter(query, filter);
-      query = ApplyCoordinateFilters(query, filter);
-      query = ApplyAwaitingResultFilter(query, filter);
-      query = ApplySortOrder(query, filter.SortOrder);
-      query = ApplyMinPredictionsFilter(query, filter);
+    await context.SaveLogEntry("SearchProperties", $"{totalCount} properties found", "Information", executionInstanceId);
 
-      var totalCount = await query.CountAsync();
-      Response.Headers.Append("Nextplace-Search-Total-Count", totalCount.ToString());
+    query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
 
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("SearchProperties", $"{totalCount} properties found", "Information", executionInstanceId);
-
-      query = query.Skip(filter.PageIndex * filter.ItemsPerPage).Take(filter.ItemsPerPage);
-
-      var properties = await GetProperties(query, filter);
-
-      await context.SaveLogEntry("SearchProperties", "Completed", "Information", executionInstanceId);
-      return Ok(properties);
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("SearchProperties", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+    var properties = await GetProperties(query, filter);
+    return Ok(properties);
   }
 
   [HttpGet("{nextplaceId}", Name = "GetProperty")]
   [SwaggerOperation("Get for property by ID")]
   public async Task<IActionResult> Get([SwaggerParameter("Nextplace ID", Required = true)][FromRoute] string nextplaceId)
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, config, "GetProperty", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetProperty", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
-
-      await context.SaveLogEntry("GetProperty", "Started", "Information", executionInstanceId);
-      var property = await context.Property
+    var property = await context.Property
           .Include(tg => tg.EstimateStats)
           .Include(tg => tg.Images)
           .Include(tg => tg.Predictions)!
           .ThenInclude(propertyPrediction => propertyPrediction.Miner).OrderByDescending(p => p.ListingDate)
           .FirstOrDefaultAsync(tg => tg.NextplaceId == nextplaceId);
 
-      if (property == null)
-      {
-        await context.SaveLogEntry("GetProperty", "No data", "Warning", executionInstanceId);
-        await context.SaveLogEntry("GetProperty", "Completed", "Information", executionInstanceId);
-        return NotFound();
-      }
-
-      var tg = new Property(
-          property.Id,
-          property.PropertyId,
-          property.NextplaceId,
-          property.ListingId,
-          property.Longitude,
-          property.Latitude,
-          property.Market,
-          property.City,
-          property.State,
-          property.ZipCode,
-          property.Address,
-          property.ListingDate,
-          property.ListingPrice,
-          property.NumberOfBeds,
-          property.NumberOfBaths,
-          property.SquareFeet,
-          property.LotSize,
-          property.YearBuilt,
-          property.PropertyType,
-          property.LastSaleDate,
-          property.HoaDues,
-          property.SaleDate,
-          property.SalePrice,
-          property.CreateDate,
-          property.LastUpdateDate,
-          property.Active,
-          property.Country)
-      {
-        Predictions = []
-      };
-       
-      tg.ImageIds = await GetPropertyImageIds(property);
-      var e = property.EstimateStats!.MaxBy(e => e.CreateDate);
-      if (e != null)
-      {
-        tg.EstimateStats = new Models.PropertyEstimateStats(e.FirstEstimateDate, e.LastEstimateDate, e.NumEstimates, e.AvgEstimate,
-            e.MinEstimate, e.MaxEstimate, e.ClosestEstimate, e.FirstEstimateAmount, e.LastEstimateAmount);
-      }
-
-      if (property.Predictions != null)
-      {
-        foreach (var prediction in property.Predictions.Where(p => p.Active))
-        {
-          var tgp = new PropertyPrediction(prediction.Miner.HotKey,
-              prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
-              prediction.PredictedSaleDate);
-
-          tg.Predictions.Add(tgp);
-        }
-      }
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("GetProperty", "Completed", "Information", executionInstanceId);
-      return Ok(tg);
-    }
-    catch (Exception ex)
+    if (property == null)
     {
-      await context.SaveLogEntry("GetProperty", ex, executionInstanceId);
-      return StatusCode(500);
+      await context.SaveLogEntry("GetProperty", "No data", "Warning", executionInstanceId);
+      await context.SaveLogEntry("GetProperty", "Completed", "Information", executionInstanceId);
+      return NotFound();
     }
+
+    var tg = new Property(
+        property.Id,
+        property.PropertyId,
+        property.NextplaceId,
+        property.ListingId,
+        property.Longitude,
+        property.Latitude,
+        property.Market,
+        property.City,
+        property.State,
+        property.ZipCode,
+        property.Address,
+        property.ListingDate,
+        property.ListingPrice,
+        property.NumberOfBeds,
+        property.NumberOfBaths,
+        property.SquareFeet,
+        property.LotSize,
+        property.YearBuilt,
+        property.PropertyType,
+        property.LastSaleDate,
+        property.HoaDues,
+        property.SaleDate,
+        property.SalePrice,
+        property.CreateDate,
+        property.LastUpdateDate,
+        property.Active,
+        property.Country)
+    {
+      Predictions = []
+    };
+
+    tg.ImageIds = await GetPropertyImageIds(property);
+    var e = property.EstimateStats!.MaxBy(e => e.CreateDate);
+    if (e != null)
+    {
+      tg.EstimateStats = new Models.PropertyEstimateStats(e.FirstEstimateDate, e.LastEstimateDate, e.NumEstimates, e.AvgEstimate,
+          e.MinEstimate, e.MaxEstimate, e.ClosestEstimate, e.FirstEstimateAmount, e.LastEstimateAmount);
+    }
+
+    if (property.Predictions != null)
+    {
+      foreach (var prediction in property.Predictions.Where(p => p.Active))
+      {
+        var tgp = new PropertyPrediction(prediction.Miner.HotKey,
+            prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
+            prediction.PredictedSaleDate);
+
+        tg.Predictions.Add(tgp);
+      }
+    }
+
+    return Ok(tg);
   }
 
   private async Task<List<string>?> GetPropertyImageIds(PropertyContext property)
@@ -935,88 +733,48 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
   [SwaggerOperation("Get trending cities")]
   public async Task<ActionResult<List<TrendingCity>>> GetTrendingCities()
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    const int resultCount = 200;
 
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, config, "GetTrendingCities", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetTrendingCities", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+    var properties = await context.Property
+      .Where(tg => tg.Predictions != null)
+      .Include(tg => tg.Predictions)
+      .ToListAsync();
 
-      await context.SaveLogEntry("GetTrendingCities", "Started", "Information", executionInstanceId);
-      const int resultCount = 200;
+    var trendingCities = properties.Where(p => p.City != null)
+      .GroupBy(tg => new { tg.City })
+      .Select(g => new TrendingCity(
+        g.Key.City!,
+        g.Sum(tg => tg.Predictions!.Count(p => p.Active))
+      ))
+      .OrderByDescending(g => g.NumberOfPredictions)
+      .Take(resultCount)
+      .ToList();
 
-      var properties = await context.Property
-          .Where(tg => tg.Predictions != null)
-          .Include(tg => tg.Predictions)
-          .ToListAsync();
-
-      var trendingCities = properties.Where(p => p.City != null)
-          .GroupBy(tg => new { tg.City })
-          .Select(g => new TrendingCity(
-              g.Key.City!,
-              g.Sum(tg => tg.Predictions!.Count(p => p.Active))
-          ))
-          .OrderByDescending(g => g.NumberOfPredictions)
-          .Take(resultCount)
-          .ToList();
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("GetTrendingCities", "Completed", "Information", executionInstanceId);
-      return Ok(trendingCities);
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("GetTrendingCities", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+    return Ok(trendingCities);
   }
 
   [HttpGet("Markets/Trending", Name = "GetTrendingMarkets")]
   [SwaggerOperation("Get trending markets")]
   public async Task<ActionResult<List<TrendingMarket>>> GetTrendingMarkets()
   {
-    var executionInstanceId = Guid.NewGuid().ToString();
+    const int resultCount = 200;
 
-    try
-    {
-      if (!HttpContext.CheckRateLimit(cache, config, "GetTrendingMarkets", out var offendingIpAddress))
-      {
-        await context.SaveLogEntry("GetTrendingMarkets", $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
-        return StatusCode(429);
-      }
+    var properties = await context.Property
+      .Where(tg => tg.Predictions != null)
+      .Include(tg => tg.Predictions)
+      .ToListAsync();
 
-      await context.SaveLogEntry("GetTrendingMarkets", "Started", "Information", executionInstanceId);
-      const int resultCount = 200;
+    var trendingMarkets = properties
+      .GroupBy(tg => new { tg.Market })
+      .Select(g => new TrendingMarket(
+        g.Key.Market,
+        g.Sum(tg => tg.Predictions!.Count(p => p.Active))
+      ))
+      .OrderByDescending(g => g.NumberOfPredictions)
+      .Take(resultCount)
+      .ToList();
 
-      var properties = await context.Property
-          .Where(tg => tg.Predictions != null)
-          .Include(tg => tg.Predictions)
-          .ToListAsync();
-
-      var trendingMarkets = properties
-          .GroupBy(tg => new { tg.Market })
-          .Select(g => new TrendingMarket(
-              g.Key.Market,
-              g.Sum(tg => tg.Predictions!.Count(p => p.Active))
-          ))
-          .OrderByDescending(g => g.NumberOfPredictions)
-          .Take(resultCount)
-          .ToList();
-
-      Response.AppendCorsHeaders();
-
-      await context.SaveLogEntry("GetTrendingMarkets", "Completed", "Information", executionInstanceId);
-      return Ok(trendingMarkets);
-    }
-    catch (Exception ex)
-    {
-      await context.SaveLogEntry("GetTrendingMarkets", ex, executionInstanceId);
-      return StatusCode(500);
-    }
+    return Ok(trendingMarkets);
   }
 
   private static IQueryable<PropertyContext> ApplyDateFilters(IQueryable<PropertyContext> query, PropertyFilter filter)
@@ -1135,8 +893,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     return query;
   }
 
-
-
   private async Task SendPropertyShareEmail(string nextplaceId, string shareRef, string senderEmailAddress, string receiverEmailAddress, string emailMessage)
   {
     var propertySharePage = config["PropertySharePage"]!;
@@ -1188,6 +944,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
     await graphClient.Users["admin@nextplace.ai"].SendMail.PostAsync(message);
   }
+
   internal static async Task<List<Property>> GetProperties(IQueryable<PropertyContext> query, PropertyFilter filter)
   {
     var properties = new List<Property>();
