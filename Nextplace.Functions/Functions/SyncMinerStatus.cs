@@ -51,8 +51,12 @@ public sealed class SyncMinerStatus(ILoggerFactory loggerFactory, IConfiguration
         else
         {
           miner.LastUpdateDate = DateTime.UtcNow;
-          miner.CreateDate = DateTime.UtcNow;
-          miner.Active = true;
+          if (!miner.Active)
+          {
+            miner.CreateDate = DateTime.UtcNow;
+            miner.Active = true;
+          }
+          
           miner.Incentive = minerDetails.Incentive;
           miner.Uid = minerDetails.Uid;
 
