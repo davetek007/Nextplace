@@ -60,7 +60,7 @@ public sealed class SyncMinerStatus(ILoggerFactory loggerFactory, IConfiguration
           miner.Incentive = minerDetails.Incentive;
           miner.Uid = minerDetails.Uid;
 
-          updates++;
+         updates++;
         }
       }
 

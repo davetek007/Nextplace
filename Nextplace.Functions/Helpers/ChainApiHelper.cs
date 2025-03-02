@@ -5,24 +5,41 @@ namespace Nextplace.Functions.Helpers;
 
 internal class ChainApiHelper(IConfiguration configuration)
 {
-    private async Task<List<DataItem>> GetMetagraph()
-    {
-        var apiKey = await new AkvHelper(configuration).GetSecretAsync("TaostatsApiKey");
-        var url = configuration["TaostatsApiUrl"];
+  private async Task<List<DataItem>> GetMetagraph()
+  {
+    var apiKey = await new AkvHelper(configuration).GetSecretAsync("TaostatsApiKey");
+    var url = configuration["TaostatsApiUrl"];
 
-        using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", apiKey);
-        var response = await httpClient.GetAsync(url);
+    using var httpClient = new HttpClient();
+    httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", apiKey);
+    var response = await httpClient.GetAsync(url);
 
-        response.EnsureSuccessStatusCode();
+    response.EnsureSuccessStatusCode();
 
-        var responseBody = await response.Content.ReadAsStringAsync();
-        var rootObject = JsonConvert.DeserializeObject<RootObject>(responseBody);
+    var responseBody = await response.Content.ReadAsStringAsync();
+    var rootObject = JsonConvert.DeserializeObject<RootObject>(responseBody);
 
-        return rootObject == null ? [] : rootObject.Data;
-    }
+    return rootObject == null ? [] : rootObject.Data;
+  }
 
-    internal async Task<List<DataItem>> GetValidators()
+  internal async Task<DateTime> GetBlockTimestamp(int blockNumber)
+  {
+    var apiKey = await new AkvHelper(configuration).GetSecretAsync("TaostatsApiKey");
+    var url = @"https://api.taostats.io/api/block/v1?block_number=" + blockNumber;
+
+    using var httpClient = new HttpClient();
+    httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", apiKey);
+    var response = await httpClient.GetAsync(url);
+
+    response.EnsureSuccessStatusCode();
+
+    var responseBody = await response.Content.ReadAsStringAsync();
+    var rootObject = JsonConvert.DeserializeObject<dynamic>(responseBody);
+
+    return rootObject!.data[0].timestamp;
+  }
+
+  internal async Task<List<DataItem>> GetValidators()
     {
         var metagraph = await GetMetagraph();
 
