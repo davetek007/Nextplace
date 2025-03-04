@@ -640,6 +640,28 @@ AS
 		WHERE id IN (SELECT id FROM @PropertyIdsToDelete2);
     end 
 
+		
+    WHILE 1 = 1
+    BEGIN
+        DECLARE @PropertyIdsToDelete3 TABLE (id BIGINT);
+
+        INSERT INTO @PropertyIdsToDelete3 (id)
+        SELECT TOP (1000) id
+        FROM dbo.PropertyPrediction
+        WHERE createDate < DATEADD(dd, -2, getutcdate());
+
+        SET @RowCount = @@ROWCOUNT;
+
+        IF @RowCount = 0 BREAK;
+					
+		insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+		values		('DeleteOldProperties', 'Deleting batch of ' + cast (@rowCount as nvarchar (450)) + ' property predictions older than 2 days', 'Information', getutcdate(), @executionInstanceId)
+
+		DELETE FROM dbo.PropertyPrediction
+		WHERE propertyId IN (SELECT id FROM @PropertyIdsToDelete3);
+    end 
+
+
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('DeleteOldProperties', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
 go

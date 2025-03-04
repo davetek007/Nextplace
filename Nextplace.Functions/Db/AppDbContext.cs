@@ -19,6 +19,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
   public DbSet<PropertyEstimateStats> PropertyEstimateStats => Set<PropertyEstimateStats>();
 
+  public DbSet<PropertyPredictionStats> PropertyPredictionStats => Set<PropertyPredictionStats>();
+
   public DbSet<Miner> Miner => Set<Miner>();
 
   public DbSet<User> User => Set<User>();
@@ -31,7 +33,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
     modelBuilder.Entity<PropertyEstimateStats>().HasOne(tgp => tgp.Property).WithMany(m => m.EstimateStats)
-        .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+      .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
+
+    modelBuilder.Entity<PropertyPredictionStats>().HasOne(tgp => tgp.Property).WithMany(m => m.PredictionStats)
+      .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
     modelBuilder.Entity<PropertyValuationPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.ValuationPredictions)
         .HasForeignKey(tgp => tgp.MinerId);
