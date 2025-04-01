@@ -16,9 +16,13 @@ public class ApiFilter(AppDbContext dbContext, IConfiguration configuration, IMe
 
     var methodName = ExtractMethodName(context.ActionDescriptor.DisplayName!);
     var response = httpContext.Response;
-    
-    await dbContext.SaveLogEntry(methodName, "Started", "Information", executionInstanceId);
-    if (!httpContext.CheckRateLimit(cache, configuration, "PostPredictions", out var offendingIpAddress))
+
+    if (!methodName.Equals("PostPredictions", StringComparison.InvariantCultureIgnoreCase))
+    {
+      await dbContext.SaveLogEntry(methodName, "Started", "Information", executionInstanceId);
+    }
+
+    if (!httpContext.CheckRateLimit(cache, configuration, methodName, out var offendingIpAddress))
     {
       await dbContext.SaveLogEntry(methodName, $"Rate limit exceeded by {offendingIpAddress}", "Warning", executionInstanceId);
       context.Result = new StatusCodeResult(429);
@@ -47,7 +51,10 @@ public class ApiFilter(AppDbContext dbContext, IConfiguration configuration, IMe
     }
     else
     {
-      await dbContext.SaveLogEntry(methodName, "Completed", "Information", executionInstanceId);
+      if (!methodName.Equals("PostPredictions", StringComparison.InvariantCultureIgnoreCase))
+      {
+        await dbContext.SaveLogEntry(methodName, "Completed", "Information", executionInstanceId);
+      }
     }
 
     response.AppendCorsHeaders();

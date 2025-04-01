@@ -6,8 +6,10 @@ using Newtonsoft.Json;
 using Miner = Nextplace.Api.Db.Miner;
 using PropertyPrediction = Nextplace.Api.Db.PropertyPrediction;
 using Microsoft.Extensions.Caching.Memory;
+using Nextplace.Api.Helpers;
 using Swashbuckle.AspNetCore.Annotations;
 using Validator = Nextplace.Api.Db.Validator;
+using System.Reflection;
 
 namespace Nextplace.Api.Controllers;
 
@@ -30,11 +32,13 @@ public class PredictionController(AppDbContext context, IConfiguration configura
 
     if (HelperExtensions.IsIpWhitelisted(configuration, ipAddressList, out var whitelistOnly))
     {
+      await context.SaveLogEntry("PostPredictions", "Started", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPredictions", "IP address whitelisted", "Information", executionInstanceId);
     }
     else if (matchingValidator == null)
     {
+      await context.SaveLogEntry("PostPredictions", "Started", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPredictions", "IP address not allowed", "Warning", executionInstanceId);
 
@@ -47,6 +51,7 @@ public class PredictionController(AppDbContext context, IConfiguration configura
         return CreatedAtAction(nameof(PostPredictions), null, null);
       }
 
+      await context.SaveLogEntry("PostPredictions", "Started", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPredictions", $"IP Addresses: {ipAddressLog}", "Information", executionInstanceId);
       await context.SaveLogEntry("PostPredictions", $"IP address returned for validator {matchingValidator.HotKey} (ID: {matchingValidator.Id})", "Information", executionInstanceId);
     }
@@ -66,6 +71,7 @@ public class PredictionController(AppDbContext context, IConfiguration configura
       return CreatedAtAction(nameof(PostPredictions), null, null);
     }
 
+    var l = new List<PropertyPrediction>();
     foreach (var prediction in request)
     {
       if (prediction.NextplaceId.StartsWith("PVR-"))
@@ -160,6 +166,7 @@ public class PredictionController(AppDbContext context, IConfiguration configura
         inserted++;
 
         context.PropertyPrediction.Add(dbEntry);
+        l.Add(dbEntry);
       }
     }
 
@@ -167,6 +174,8 @@ public class PredictionController(AppDbContext context, IConfiguration configura
 
     await context.SaveLogEntry("PostPredictions",
         $"Properties: Inserted {inserted}, Deleted {deleted}, Properties missing {propertyMissing}, Active predictions {activePredictions}, Predicted Sale Date missing {predictedSaleDateMissing}", "Information", executionInstanceId);
+    
+    await PredictionInserter.InsertPredictionsAsync(context, l, executionInstanceId);
 
     await context.SaveLogEntry("PostPredictions",
         $"Property Valuations: Inserted {insertedPropertyValuations}, Property valuations missing {propertyValuationMissing}, Active predictions {activePropertyValuationPredictions}", "Information", executionInstanceId);
@@ -174,6 +183,7 @@ public class PredictionController(AppDbContext context, IConfiguration configura
     await context.SaveLogEntry("PostPredictions", "Saving to DB", "Information", executionInstanceId);
     await context.SaveChangesAsync();
 
+    await context.SaveLogEntry("PostPredictions", "Completed", "Information", executionInstanceId);
     return CreatedAtAction(nameof(PostPredictions), null, null);
   }
 
