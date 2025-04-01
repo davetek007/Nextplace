@@ -26,6 +26,8 @@ public sealed class CreatePropertyPredictionFile(ILoggerFactory loggerFactory, A
     {
       _logger.LogInformation($"CreatePropertyPredictionFile executed at: {DateTime.UtcNow}");
       await context.SaveLogEntry("CreatePropertyPredictionFile", "Started", "Information", executionInstanceId);
+      
+      context.Database.SetCommandTimeout(1800);
 
       var properties = await context.PropertyPredictionStats
         .Include(p => p.Property)
