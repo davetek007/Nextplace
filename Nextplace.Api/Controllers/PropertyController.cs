@@ -27,7 +27,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 {
   [HttpGet("Sample", Name = "SampleProperties")]
   [SwaggerOperation("Sample properties per market")]
-  public async Task<ActionResult<List<MarketSample>>> Sample([FromQuery] int sampleSize)
+  public async Task<ActionResult<List<MarketSample>>> SampleProperties([FromQuery] int sampleSize)
   {
     var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
@@ -485,7 +485,7 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
   [HttpGet("Search", Name = "SearchProperties")]
   [SwaggerOperation("Search for properties")]
-  public async Task<ActionResult<List<Property>>> Search([FromQuery] PropertyFilter filter)
+  public async Task<ActionResult<List<Property>>> SearchProperties([FromQuery] PropertyFilter filter)
   {
     filter.TopPredictionCount = Math.Clamp(filter.TopPredictionCount, 0, 10);
     var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
@@ -519,15 +519,14 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
 
   [HttpGet("{nextplaceId}", Name = "GetProperty")]
   [SwaggerOperation("Get for property by ID")]
-  public async Task<IActionResult> Get([SwaggerParameter("Nextplace ID", Required = true)][FromRoute] string nextplaceId)
+  public async Task<IActionResult> GetProperty([SwaggerParameter("Nextplace ID", Required = true)][FromRoute] string nextplaceId)
   {
     var executionInstanceId = HttpContext.Items["executionInstanceId"]?.ToString()!;
 
     var property = await context.Property
           .Include(tg => tg.EstimateStats)
           .Include(tg => tg.Images)
-          .Include(tg => tg.Predictions)!
-          .ThenInclude(propertyPrediction => propertyPrediction.Miner).OrderByDescending(p => p.ListingDate)
+          .Include(tg => tg.PredictionStats)!
           .FirstOrDefaultAsync(tg => tg.NextplaceId == nextplaceId);
 
     if (property == null)
@@ -577,17 +576,32 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
           e.MinEstimate, e.MaxEstimate, e.ClosestEstimate, e.FirstEstimateAmount, e.LastEstimateAmount);
     }
 
-    if (property.Predictions != null)
-    {
-      foreach (var prediction in property.Predictions.Where(p => p.Active))
-      {
-        var tgp = new PropertyPrediction(prediction.Miner.HotKey,
-            prediction.Miner.ColdKey, prediction.PredictionDate, prediction.PredictedSalePrice,
-            prediction.PredictedSaleDate);
+    tg.Predictions = [];
 
-        tg.Predictions.Add(tgp);
+    var pps = property.PredictionStats!.FirstOrDefault();
+
+    if (pps != null)
+    {
+      var json = pps.Top10Predictions;
+      var predictionEntries = JsonConvert.DeserializeObject<List<dynamic>>(json);
+
+      if (predictionEntries != null)
+      {
+        for (var i = 0; i < predictionEntries.Count; i++)
+        {
+          var entry = predictionEntries[i];
+          tg.Predictions.Add(new PropertyPrediction(
+            minerHotKey: (string)entry.hotKey,
+            minerColdKey: (string)entry.coldKey,
+            predictionDate: (DateTime)entry.predictionDate,
+            predictedSalePrice: (double)entry.predictedSalePrice,
+            predictedSaleDate: (DateTime)entry.predictedSaleDate));
+        }
       }
     }
+
+    tg.PredictionStats = new PropertyPredictionStats(pps.NumPredictions, pps.AvgPredictedSalePrice,
+      pps.MinPredictedSalePrice, pps.MaxPredictedSalePrice);
 
     return Ok(tg);
   }
@@ -729,54 +743,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
     return fullScreenPhotoUrls;
   }
 
-  [HttpGet("Cities/Trending", Name = "GetTrendingCities")]
-  [SwaggerOperation("Get trending cities")]
-  public async Task<ActionResult<List<TrendingCity>>> GetTrendingCities()
-  {
-    const int resultCount = 200;
-
-    var properties = await context.Property
-      .Where(tg => tg.Predictions != null)
-      .Include(tg => tg.Predictions)
-      .ToListAsync();
-
-    var trendingCities = properties.Where(p => p.City != null)
-      .GroupBy(tg => new { tg.City })
-      .Select(g => new TrendingCity(
-        g.Key.City!,
-        g.Sum(tg => tg.Predictions!.Count(p => p.Active))
-      ))
-      .OrderByDescending(g => g.NumberOfPredictions)
-      .Take(resultCount)
-      .ToList();
-
-    return Ok(trendingCities);
-  }
-
-  [HttpGet("Markets/Trending", Name = "GetTrendingMarkets")]
-  [SwaggerOperation("Get trending markets")]
-  public async Task<ActionResult<List<TrendingMarket>>> GetTrendingMarkets()
-  {
-    const int resultCount = 200;
-
-    var properties = await context.Property
-      .Where(tg => tg.Predictions != null)
-      .Include(tg => tg.Predictions)
-      .ToListAsync();
-
-    var trendingMarkets = properties
-      .GroupBy(tg => new { tg.Market })
-      .Select(g => new TrendingMarket(
-        g.Key.Market,
-        g.Sum(tg => tg.Predictions!.Count(p => p.Active))
-      ))
-      .OrderByDescending(g => g.NumberOfPredictions)
-      .Take(resultCount)
-      .ToList();
-
-    return Ok(trendingMarkets);
-  }
-
   private static IQueryable<PropertyContext> ApplyDateFilters(IQueryable<PropertyContext> query, PropertyFilter filter)
   {
     if (filter.ListingStartDate.HasValue)
@@ -874,8 +840,6 @@ public class PropertyController(AppDbContext context, IConfiguration config, IMe
       "latitude_desc" => query.OrderByDescending(tgp => tgp.Latitude),
       "market_asc" => query.OrderBy(tgp => tgp.Market),
       "market_desc" => query.OrderByDescending(tgp => tgp.Market),
-      "predictions_asc" => query.OrderBy(tg => tg.Predictions!.Count(p => p.Active)),
-      "predictions_desc" => query.OrderByDescending(tg => tg.Predictions!.Count(p => p.Active)),
       _ => query.OrderByDescending(tg => tg.ListingDate)
     };
   }

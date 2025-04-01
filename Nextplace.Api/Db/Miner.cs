@@ -27,9 +27,6 @@ public sealed class Miner : EntityTableData
     public required bool Active { get; set; }
 
     // ReSharper disable once CollectionNeverUpdated.Global
-    public ICollection<PropertyPrediction>? Predictions { get; init; }
-
-    // ReSharper disable once CollectionNeverUpdated.Global
     public ICollection<PropertyValuationPrediction>? ValuationPredictions { get; init; }
 
     // ReSharper disable once CollectionNeverUpdated.Global

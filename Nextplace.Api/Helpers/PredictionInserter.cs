@@ -11,9 +11,9 @@ public static class PredictionInserter
   private const int ParamsPerRow = 8;
   private const int MaxRowsPerBatch = MaxParamsPerBatch / ParamsPerRow;
 
-  public static async Task InsertPredictionsAsync(AppDbContext context, List<PropertyPrediction> predictions, string executionInstanceId)
+  public static async Task InsertPredictionsAsync(AppDbContext context, List<PropertyPredictionInfo> predictions, string executionInstanceId)
   {
-    var groups = predictions.GroupBy(p => p.PredictionDate.Date);
+    var groups = predictions.GroupBy(p => p.CreateDate.Date);
 
     foreach (var group in groups)
     {
@@ -33,7 +33,7 @@ public static class PredictionInserter
     }
   }
 
-  private static async Task InsertBatchAsync(AppDbContext context, string tableName, List<PropertyPrediction> batch)
+  private static async Task InsertBatchAsync(AppDbContext context, string tableName, List<PropertyPredictionInfo> batch)
   {
     var sb = new StringBuilder();
     var parameters = new List<SqlParameter>();

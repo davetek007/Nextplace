@@ -28,9 +28,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
   public DbSet<ApiLog> ApiLog => Set<ApiLog>();
 
   public DbSet<MinerScore> MinerScore => Set<MinerScore>();
-
-  public DbSet<PropertyPrediction> PropertyPrediction => Set<PropertyPrediction>();
-
+  
   public DbSet<Validator> Validator => Set<Validator>();
 
   public DbSet<User> User => Set<User>();
@@ -52,15 +50,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     modelBuilder.Entity<PropertyShare>().HasOne(tgp => tgp.Property).WithMany(m => m.Shares)
       .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
-
-    modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Miner).WithMany(m => m.Predictions)
-        .HasForeignKey(tgp => tgp.MinerId);
-
-    modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Validator).WithMany(m => m.Predictions)
-        .HasForeignKey(tgp => tgp.ValidatorId);
-
-    modelBuilder.Entity<PropertyPrediction>().HasOne(tgp => tgp.Property).WithMany(m => m.Predictions)
-        .HasForeignKey(tgp => tgp.PropertyId); base.OnModelCreating(modelBuilder);
 
     modelBuilder.Entity<MinerScore>().HasOne(tgp => tgp.Miner).WithMany(m => m.Scores)
         .HasForeignKey(tgp => tgp.MinerId);
