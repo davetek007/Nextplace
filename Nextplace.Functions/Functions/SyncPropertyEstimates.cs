@@ -5,6 +5,7 @@ using Nextplace.Functions.Db;
 using Nextplace.Functions.Helpers;
 using Newtonsoft.Json;
 using Nextplace.Functions.Models.SyncPropertyEstimates;
+using Microsoft.EntityFrameworkCore;
 
 namespace Nextplace.Functions.Functions;
 
@@ -23,14 +24,16 @@ public sealed class SyncPropertyEstimates(ILoggerFactory loggerFactory, IConfigu
       _logger.LogInformation($"SyncPropertyEstimates executed at: {DateTime.UtcNow}");
       await context.SaveLogEntry("SyncPropertyEstimates", "Started", "Information", executionInstanceId);
 
-      _apiKey = await new AkvHelper(configuration).GetSecretAsync("ZillowApiKey");
+      context.Database.SetCommandTimeout(1800);
 
       var properties = context.Property
           .Where(p => p.Active && !p.Estimates!.Any() && p.SaleDate != null && p.Address != null &&
                       p.Country == country && p.City != null && p.State != null && p.ZipCode != null && !p.EstimatesCollected)
           .ToList();
-
+      
       await context.SaveLogEntry("SyncPropertyEstimates", $"Processing {properties.Count} sold properties", "Information", executionInstanceId);
+      
+      _apiKey = await new AkvHelper(configuration).GetSecretAsync("ZillowApiKey");
 
       foreach (var property in properties)
       {
