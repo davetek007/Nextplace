@@ -410,31 +410,49 @@ go
 
 create procedure [dbo].[CalculatePropertyPredictionStats] (@executionInstanceId nvarchar(450))
 as
-	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
-
-	select		p.id as propertyId, pp.id as propertyPredictionId, minerId, p.saleDate, p.salePrice, pp.predictedSaleDate, pp.predictedSalePrice, pp.predictionDate
-	into		#t1
-	from		dbo.Property p
-	inner join	dbo.PropertyPrediction pp on pp.propertyId = p.id and pp.active = 0x1
-	where		p.active = 0x1
-	and			( p.lastUpdateDate > dateadd(dd, -1, getutcdate()) or pp.createDate > dateadd(dd, -1, getutcdate()))
-			
-	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
-	values		('CalculatePropertyPredictionStats', 'Predictions selected', 'Information', getutcdate(), @executionInstanceId)
-
-	delete		t1
-	from		#t1 t1, (
-		select		propertyId, max(propertyPredictionId) as propertyPredictionId, minerId, count(1) as count
-		from		#t1
-		group by	propertyId, minerId
-		having		count(1) > 1) as t2
-	where		t1.propertyId = t2.propertyId
-	and			t1.minerId = t2.minerId
-	and			t1.propertyPredictionId < t2.propertyPredictionId
 	
+	CREATE TABLE #t1 (
+		propertyId bigint,
+		propertyPredictionId bigint,
+		minerId bigint,
+		saleDate datetime2,
+		salePrice float,
+		predictedSaleDate datetime2,
+		predictedSalePrice float,
+		predictionDate datetime2);
+				 
+	DECLARE @today NVARCHAR(10) = CONVERT(NVARCHAR(10), GETUTCDATE(), 120);
+	DECLARE @yesterday NVARCHAR(10) = CONVERT(NVARCHAR(10), DATEADD(DAY, -1, GETUTCDATE()), 120);
+	 
+	DECLARE @sql NVARCHAR(MAX) = '
+	INSERT INTO #t1
+	SELECT 
+		p.id AS propertyId,
+		pp.id AS propertyPredictionId,
+		pp.minerId,
+		p.saleDate,
+		p.salePrice,
+		pp.predictedSaleDate,
+		pp.predictedSalePrice,
+		pp.predictionDate
+	FROM dbo.Property p WITH (NOLOCK)
+	INNER JOIN (
+		SELECT * FROM dbo.[PropertyPrediction' + @today + ']
+		UNION ALL
+		SELECT * FROM dbo.[PropertyPrediction' + @yesterday + ']
+	) pp ON pp.propertyId = p.id
+	WHERE p.active = 1
+	AND (
+		p.lastUpdateDate > DATEADD(DAY, -1, GETUTCDATE())
+		OR pp.predictionDate >= DATEADD(DAY, -1, GETUTCDATE())
+	);';
+
+	EXEC sp_executesql @sql;
+
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
-	values		('CalculatePropertyPredictionStats', 'Predictions deduplicated', 'Information', getutcdate(), @executionInstanceId);
+	values		('CalculatePropertyPredictionStats', 'Predictions selected', 'Information', getutcdate(), @executionInstanceId);
 
 	with rankedPredictions as (
 		select	p.propertyId, p.saleDate, p.salePrice, p.predictedSaleDate, p.predictedSalePrice, p.predictionDate, m.id as minerId, 
@@ -443,7 +461,7 @@ as
 			order by
 				case when p.salePrice is not null then abs(p.predictedSalePrice - p.salePrice) else null end asc,
 				case when p.salePrice is null then m.incentive else null end desc) as ranking
-		from #t1 p, dbo.Miner m where p.minerId = m.id)	
+		from #t1 p, dbo.Miner m (nolock) where p.minerId = m.id)	
 	select		*
 	into		#t2
 	from		rankedPredictions
@@ -501,6 +519,18 @@ as
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'New entries added', 'Information', getutcdate(), @executionInstanceId)
 
+	DECLARE @yesterdayTable NVARCHAR(128) = '[PropertyPrediction' + @yesterday + ']';
+	DECLARE @dropSql NVARCHAR(MAX) = '
+	IF OBJECT_ID(''dbo.' + @yesterdayTable + ''', ''U'') IS NOT NULL
+	BEGIN
+		DROP TABLE dbo.' + @yesterdayTable + ';
+	END';
+
+	EXEC sp_executesql @dropSql;
+
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Yesterday''s table dropped', 'Information', getutcdate(), @executionInstanceId)
+	
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
  go
