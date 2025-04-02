@@ -410,7 +410,7 @@ go
 
 create procedure [dbo].[CalculatePropertyPredictionStats] (@executionInstanceId nvarchar(450))
 as
-insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
+	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure started', 'Information', getutcdate(), @executionInstanceId)
 	
 	CREATE TABLE #t1 (
@@ -425,6 +425,7 @@ insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, execution
 				 
 	DECLARE @today NVARCHAR(10) = CONVERT(NVARCHAR(10), GETUTCDATE(), 120);
 	DECLARE @yesterday NVARCHAR(10) = CONVERT(NVARCHAR(10), DATEADD(DAY, -1, GETUTCDATE()), 120);
+	DECLARE @dayBeforeYesterday NVARCHAR(10) = CONVERT(NVARCHAR(10), DATEADD(DAY, -2, GETUTCDATE()), 120);
 	 
 	DECLARE @sql NVARCHAR(MAX) = '
 	INSERT INTO #t1
@@ -519,21 +520,21 @@ insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, execution
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'New entries added', 'Information', getutcdate(), @executionInstanceId)
 
-	DECLARE @yesterdayTable NVARCHAR(128) = '[PropertyPrediction' + @yesterday + ']';
+	DECLARE @dayBeforeYesterdayTable NVARCHAR(128) = '[PropertyPrediction' + @dayBeforeYesterday + ']';
 	DECLARE @dropSql NVARCHAR(MAX) = '
-	IF OBJECT_ID(''dbo.' + @yesterdayTable + ''', ''U'') IS NOT NULL
+	IF OBJECT_ID(''dbo.' + @dayBeforeYesterdayTable + ''', ''U'') IS NOT NULL
 	BEGIN
-		DROP TABLE dbo.' + @yesterdayTable + ';
+		DROP TABLE dbo.' + @dayBeforeYesterdayTable + ';
 	END';
 
 	EXEC sp_executesql @dropSql;
 
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
-	values		('CalculatePropertyPredictionStats', 'Yesterday''s table dropped', 'Information', getutcdate(), @executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Day before yesterday''s table dropped', 'Information', getutcdate(), @executionInstanceId)
 	
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
- go
+go
   
 create PROCEDURE [dbo].[DeleteOldProperties]  (@executionInstanceId nvarchar(450))
 AS
