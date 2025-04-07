@@ -25,7 +25,7 @@ public sealed class CalculatePropertyPredictionStats(ILoggerFactory loggerFactor
       await using var command = new SqlCommand("dbo.CalculatePropertyPredictionStats", connection);
 
       command.CommandType = CommandType.StoredProcedure;
-      command.CommandTimeout = 1800;
+      command.CommandTimeout = 18000;
 
       command.Parameters.Add(new SqlParameter("@executionInstanceId", executionInstanceId));
 

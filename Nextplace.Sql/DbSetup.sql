@@ -423,9 +423,7 @@ as
 		predictedSalePrice float,
 		predictionDate datetime2);
 				 
-	DECLARE @today NVARCHAR(10) = CONVERT(NVARCHAR(10), GETUTCDATE(), 120);
 	DECLARE @yesterday NVARCHAR(10) = CONVERT(NVARCHAR(10), DATEADD(DAY, -1, GETUTCDATE()), 120);
-	DECLARE @dayBeforeYesterday NVARCHAR(10) = CONVERT(NVARCHAR(10), DATEADD(DAY, -2, GETUTCDATE()), 120);
 	 
 	DECLARE @sql NVARCHAR(MAX) = '
 	INSERT INTO #t1
@@ -440,15 +438,9 @@ as
 		pp.predictionDate
 	FROM dbo.Property p WITH (NOLOCK)
 	INNER JOIN (
-		SELECT * FROM dbo.[PropertyPrediction' + @today + ']
-		UNION ALL
 		SELECT * FROM dbo.[PropertyPrediction' + @yesterday + ']
 	) pp ON pp.propertyId = p.id
-	WHERE p.active = 1
-	AND (
-		p.lastUpdateDate > DATEADD(DAY, -1, GETUTCDATE())
-		OR pp.predictionDate >= DATEADD(DAY, -1, GETUTCDATE())
-	);';
+	WHERE p.active = 1;';
 
 	EXEC sp_executesql @sql;
 
@@ -520,17 +512,17 @@ as
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'New entries added', 'Information', getutcdate(), @executionInstanceId)
 
-	DECLARE @dayBeforeYesterdayTable NVARCHAR(128) = '[PropertyPrediction' + @dayBeforeYesterday + ']';
+	DECLARE @yesterdayTable NVARCHAR(128) = '[PropertyPrediction' + @yesterday + ']';
 	DECLARE @dropSql NVARCHAR(MAX) = '
-	IF OBJECT_ID(''dbo.' + @dayBeforeYesterdayTable + ''', ''U'') IS NOT NULL
+	IF OBJECT_ID(''dbo.' + @yesterdayTable + ''', ''U'') IS NOT NULL
 	BEGIN
-		DROP TABLE dbo.' + @dayBeforeYesterdayTable + ';
+		DROP TABLE dbo.' + @yesterdayTable + ';
 	END';
 
 	EXEC sp_executesql @dropSql;
 
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
-	values		('CalculatePropertyPredictionStats', 'Day before yesterday''s table dropped', 'Information', getutcdate(), @executionInstanceId)
+	values		('CalculatePropertyPredictionStats', 'Dropped yesterday table', 'Information', getutcdate(), @executionInstanceId)
 	
 	insert		dbo.FunctionLog (functionName, logEntry, entryType, timeStamp, executionInstanceId)
 	values		('CalculatePropertyPredictionStats', 'Stored Procedure completed', 'Information', getutcdate(), @executionInstanceId)
